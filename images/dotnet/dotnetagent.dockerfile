@@ -34,6 +34,9 @@ ENV DOTNET_ROOT=/usr/share/dotnet
 ENV PATH="$PATH:/usr/share/dotnet"
 ENV HOME=/root
 
+# Ensure the TeamCity agent's configuration directory exists
+RUN mkdir -p /opt/teamcity-agent/conf
+
 # Configure TeamCity agent properties
 RUN echo "docker.server.osType=linux" >> /opt/teamcity-agent/conf/buildAgent.properties \
     && echo "env.HOME=/root" >> /opt/teamcity-agent/conf/buildAgent.properties \
