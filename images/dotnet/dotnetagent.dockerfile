@@ -1,6 +1,9 @@
 # Use official Teamcity agent image
 FROM jetbrains/teamcity-agent:2024.07.3-linux-sudo
 
+# Switch to root user
+USER root
+
 # Set the working directory
 WORKDIR /build
 
