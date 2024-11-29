@@ -29,5 +29,15 @@ RUN apt-get update && apt-get install -y \
     && ln -s /usr/share/dotnet/dotnet \
     && rm dotnet-sdk-8.0.404-linux-x64.tar.gz
 
-# Set the HOME environment variable (required for some tools)
+# Set environment variables
+ENV DOTNET_ROOT=/usr/share/dotnet
+ENV PATH="$PATH:/usr/share/dotnet"
 ENV HOME=/root
+
+# Configure TeamCity agent properties
+RUN echo "docker.server.osType=linux" >> /opt/teamcity-agent/conf/buildAgent.properties \
+    && echo "env.HOME=/root" >> /opt/teamcity-agent/conf/buildAgent.properties \
+    && echo "DotNetCLI_Path=/usr/bin/dotnet" >> /opt/teamcity-agent/conf/buildAgent.properties
+
+# Ensure agent can register with the TeamCity server (run agent on container startup)
+CMD ["/opt/teamcity-agent/bin/agent.sh", "run"]
