@@ -13,13 +13,13 @@ ARG dotnetSdkVersion=8.0.404
 ARG dotnetSdkChecksum
 ENV DOTNET_DOWNLOAD_URL="https://download.visualstudio.microsoft.com/download/pr/4e3b04aa-c015-4e06-a42e-05f9f3c54ed2/74d1bb68e330eea13ecfc47f7cf9aeb7/dotnet-sdk-${dotnetSdkVersion}-linux-x64.tar.gz"
 
-# Install .NET SDK
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
-    && echo "Downloading .NET SDK [${dotnetSdkVersion}] ..." \
+    && echo "Downloading .NET SDK [${dotnetSdkVersion}] from $DOTNET_DOWNLOAD_URL ..." \
     && wget -O /tmp/dotnet.tar.gz $DOTNET_DOWNLOAD_URL \
-    && echo "Downloaded .NET SDK ${dotnetSdkVersion} checksum: '$(sha512sum /tmp/dotnet.tar.gz)'" \
-    && echo "${dotnetSdkChecksum}  /tmp/dotnet.tar.gz" | sha512sum -c - \
+    && echo "Verifying checksum..." \
+    && sha512sum /tmp/dotnet.tar.gz \
+    && echo "${dotnetSdkChecksum}  /tmp/dotnet.tar.gz" | sha512sum -c - || exit 1 \
     && mkdir -p /opt/dotnet \
     && tar -zxf /tmp/dotnet.tar.gz -C /opt/dotnet \
     && ln -s /opt/dotnet/dotnet /usr/bin/dotnet \
