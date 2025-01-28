@@ -15,7 +15,7 @@ RUN echo "Downloading .NET SDK [${dotnetSdkVersion}] from $DOTNET_DOWNLOAD_URL .
     && wget -O /tmp/dotnet.tar.gz $DOTNET_DOWNLOAD_URL \
     && mkdir -p /opt/dotnet \
     && tar -zxf /tmp/dotnet.tar.gz -C /opt/dotnet \
-    && ln -sf /opt/dotnet/dotnet /usr/bin/dotnet \  # Use '-sf' to overwrite if link exists
+    && ln -sf /opt/dotnet/dotnet /usr/bin/dotnet \
     && rm -rf /tmp/dotnet.tar.gz \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && find /opt/dotnet -name "*.lzma" -type f -delete
