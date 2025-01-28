@@ -10,6 +10,9 @@ ENV DOTNET_DOWNLOAD_URL="https://download.visualstudio.microsoft.com/download/pr
 
 RUN apt-get update && apt-get install -y --no-install-recommends wget
 
+# Remove existing .NET SDKs
+RUN rm -rf /usr/share/dotnet
+
 # Download and install .NET SDK
 RUN echo "Downloading .NET SDK [${dotnetSdkVersion}] from $DOTNET_DOWNLOAD_URL ..." \
     && wget -O /tmp/dotnet.tar.gz $DOTNET_DOWNLOAD_URL \
