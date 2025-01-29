@@ -7,7 +7,7 @@ USER root
 WORKDIR /opt/buildagent/work
 
 RUN apt-get update && apt-get install -y --no-install-recommends wget jq curl && \
-    METADATA_URL="https://dotnetcli.blob.core.windows.net/dotnet/release-metadata/$dotnetSdkVersion/releases.json" && \
+    METADATA_URL="https://dotnetcli.blob.core.windows.net/dotnet/release-metadata/${dotnetSdkVersion}/releases.json" && \
     echo "Fetching .NET SDK metadata from $METADATA_URL..." && \
     LATEST_SDK=$(curl -s $METADATA_URL | jq -r 'if .["latest-sdk"] then .["latest-sdk"] else "" end') && \
     echo "✅ Latest .NET SDK version: $LATEST_SDK" && \
