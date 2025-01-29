@@ -1,7 +1,8 @@
 ARG teamCityAgentImage=jetbrains/teamcity-agent:2024.07.3-linux-sudo
-ARG dotnetSdkVersion=8.0
 
 FROM ${teamCityAgentImage}
+
+ARG dotnetSdkVersion=8.0
 
 USER root
 WORKDIR /opt/buildagent/work
