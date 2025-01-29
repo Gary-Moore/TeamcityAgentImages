@@ -8,17 +8,19 @@ WORKDIR /opt/buildagent/work
 # Fetch the latest .NET SDK dynamically
 ARG dotnetSdkVersion=8.0
 
-RUN apt-get update && apt-get install -y --no-install-recommends wget jq
+RUN apt-get update && apt-get install -y --no-install-recommends wget jq curl
 
 # Remove existing .NET SDKs
 RUN rm -rf /usr/share/dotnet
 
 # Download and install .NET SDK
 
-RUN METADATA_URL="https://dotnetcli.blob.core.windows.net/dotnet/release-metadata/$dotnetSdkVersion/releases.json" && \
-    LATEST_SDK=$(curl -s $METADATA_URL | jq -r '.latestSDK') && \
-    DOWNLOAD_URL=$(curl -s $METADATA_URL | jq -r --arg SDK "$LATEST_SDK" '.releases[] | select(.sdk.version==$SDK) | .sdk.files[] | select(.name=="dotnet-sdk-linux-x64.tar.gz") | .url') && \
-    echo "Downloading .NET SDK from $DOWNLOAD_URL" \
+RUN METADATA_URL="https://dotnetcli.blob.core.windows.net/dotnet/release-metadata/$dotnetSdkVersion/releases.json" \
+    && LATEST_SDK=$(curl -s $METADATA_URL | jq -r '.latestSDK') \
+    && DOWNLOAD_URL=$(curl -s $METADATA_URL | jq -r --arg SDK "$LATEST_SDK" \
+    '.releases[] | select(.sdk.version=="\($SDK)") | .sdk.files[] | select(.name=="dotnet-sdk-linux-x64.tar.gz" and .rid=="linux-x64") | .url') \
+    && if [ -z "$DOWNLOAD_URL" ]; then echo "❌ ERROR: Failed to fetch .NET SDK download URL!" && exit 1; fi && \
+    && echo "Downloading .NET SDK from $DOWNLOAD_URL" \
     && wget -O /tmp/dotnet.tar.gz "$DOWNLOAD_URL" \
     && mkdir -p /opt/dotnet \
     && tar -zxf /tmp/dotnet.tar.gz -C /opt/dotnet \
