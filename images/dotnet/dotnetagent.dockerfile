@@ -8,8 +8,8 @@ ARG nodeVersion=22
 USER root
 WORKDIR /opt/buildagent/work
 
-# Ensure dotnetSdkVersion has a valid default value
-RUN if [ -z "$dotnetSdkVersion" ]; then echo "❌ ERROR: dotnetSdkVersion is not set!"; exit 1; fi
+# Remove existing dotnet versions
+RUN rm -rf /usr/share/dotnet
 
 # install the dotnet SDK
 RUN apt-get update && apt-get install -y --no-install-recommends wget jq curl && \
