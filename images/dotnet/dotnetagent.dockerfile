@@ -19,7 +19,7 @@ RUN METADATA_URL="https://dotnetcli.blob.core.windows.net/dotnet/release-metadat
     && LATEST_SDK=$(curl -s $METADATA_URL | jq -r '.latestSDK') \
     && DOWNLOAD_URL=$(curl -s $METADATA_URL | jq -r --arg SDK "$LATEST_SDK" \
     '.releases[] | select(.sdk.version=="\($SDK)") | .sdk.files[] | select(.name=="dotnet-sdk-linux-x64.tar.gz" and .rid=="linux-x64") | .url') \
-    && if [ -z "$DOWNLOAD_URL" ]; then echo "❌ ERROR: Failed to fetch .NET SDK download URL!" && exit 1; fi && \
+    && if [ -z "$DOWNLOAD_URL" ]; then echo "❌ ERROR: Failed to fetch .NET SDK download URL!" && exit 1; fi \
     && echo "Downloading .NET SDK from $DOWNLOAD_URL" \
     && wget -O /tmp/dotnet.tar.gz "$DOWNLOAD_URL" \
     && mkdir -p /opt/dotnet \
