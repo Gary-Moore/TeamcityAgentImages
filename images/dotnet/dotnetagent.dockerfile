@@ -29,18 +29,21 @@ RUN rm -rf /usr/share/dotnet && \
     usermod -aG docker buildagent && \
     dotnet help && dotnet --info
 
+# Switch to buildagent user for Node.js installation
+USER buildagent
+WORKDIR /home/buildagent
+
 # Install Node.js
 RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash && \
-    export NVM_DIR="/root/.nvm" && \
+    export NVM_DIR="/home/buildagent/.nvm" && \
     [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && \
     nvm install $nodeVersion && \
     nvm use $nodeVersion && \
     nvm alias default $nodeVersion && \
-    ln -s /root/.nvm/versions/node/v$nodeVersion/bin/node /usr/bin/node && \
-    ln -s /root/.nvm/versions/node/v$nodeVersion/bin/npm /usr/bin/npm && \
-    ln -s /root/.nvm/versions/node/v$nodeVersion/bin/npx /usr/bin/npx && \
+    echo "export NVM_DIR=\"/home/buildagent/.nvm\"" >> /home/buildagent/.bashrc && \
+    echo "[ -s \"\$NVM_DIR/nvm.sh\" ] && . \"\$NVM_DIR/nvm.sh\"" >> /home/buildagent/.bashrc && \
+    echo "export PATH=\"\$NVM_DIR/versions/node/v$nodeVersion/bin:\$PATH\"" >> /home/buildagent/.bashrc && \
     echo "✅ Installed Node.js version:" && node -v && \
     echo "✅ Installed npm version:" && npm -v
 
 VOLUME /var/lib/docker
-USER buildagent
