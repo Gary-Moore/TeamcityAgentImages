@@ -6,6 +6,9 @@ FROM ${teamCityAgentImage}
 USER root
 WORKDIR /opt/buildagent/work
 
+# Ensure dotnetSdkVersion has a valid default value
+RUN if [ -z "$dotnetSdkVersion" ]; then echo "❌ ERROR: dotnetSdkVersion is not set!"; exit 1; fi
+
 RUN apt-get update && apt-get install -y --no-install-recommends wget jq curl && \
     METADATA_URL="https://dotnetcli.blob.core.windows.net/dotnet/release-metadata/${dotnetSdkVersion}/releases.json" && \
     echo "Fetching .NET SDK metadata from $METADATA_URL..." && \
