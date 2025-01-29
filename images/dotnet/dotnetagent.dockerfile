@@ -8,11 +8,9 @@ ARG nodeVersion=22
 USER root
 WORKDIR /opt/buildagent/work
 
-# Remove existing dotnet versions
-RUN rm -rf /usr/share/dotnet
-
 # install the dotnet SDK
-RUN apt-get update && apt-get install -y --no-install-recommends wget jq curl && \
+RUN rm -rf /usr/share/dotnet && \
+    apt-get update && apt-get install -y --no-install-recommends wget jq curl && \
     METADATA_URL="https://dotnetcli.blob.core.windows.net/dotnet/release-metadata/${dotnetSdkVersion}/releases.json" && \
     echo "Fetching .NET SDK metadata from $METADATA_URL..." && \
     LATEST_SDK=$(curl -s $METADATA_URL | jq -r 'if .["latest-sdk"] then .["latest-sdk"] else "" end') && \
@@ -33,11 +31,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends wget jq curl &&
 
 # Install Node.js
 RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash && \
-    export NVM_DIR="$HOME/.nvm" && \
+    export NVM_DIR="/root/.nvm" && \
     [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && \
     nvm install $nodeVersion && \
     nvm use $nodeVersion && \
     nvm alias default $nodeVersion && \
+    ln -s /root/.nvm/versions/node/v$nodeVersion/bin/node /usr/bin/node && \
+    ln -s /root/.nvm/versions/node/v$nodeVersion/bin/npm /usr/bin/npm && \
+    ln -s /root/.nvm/versions/node/v$nodeVersion/bin/npx /usr/bin/npx && \
     echo "✅ Installed Node.js version:" && node -v && \
     echo "✅ Installed npm version:" && npm -v
 
