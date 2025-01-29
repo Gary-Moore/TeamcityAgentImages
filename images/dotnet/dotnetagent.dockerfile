@@ -1,4 +1,3 @@
-# Use official TeamCity agent image
 ARG teamCityAgentImage=jetbrains/teamcity-agent:2024.07.3-linux-sudo
 FROM ${teamCityAgentImage}
 
@@ -8,28 +7,28 @@ WORKDIR /opt/buildagent/work
 # Fetch the latest .NET SDK dynamically
 ARG dotnetSdkVersion=8.0
 
-RUN apt-get update && apt-get install -y --no-install-recommends wget jq curl
+RUN apt-get update && apt-get install -y --no-install-recommends wget jq curl && \
+    METADATA_URL="https://dotnetcli.blob.core.windows.net/dotnet/release-metadata/$dotnetSdkVersion/releases.json" && \
+    echo "Fetching .NET SDK metadata from $METADATA_URL..." && \
+    curl -s $METADATA_URL | jq '.' && \
+    LATEST_SDK=$(curl -s $METADATA_URL | jq -r '.latestSDK') && \
+    echo "✅ Latest .NET SDK version: $LATEST_SDK" && \
+    DOWNLOAD_URL=$(curl -s $METADATA_URL | jq -r --arg SDK "$LATEST_SDK" \
+    '.releases[] | select(.sdk.version==$SDK) | .sdk.files[] | select(.rid=="linux-x64" and .name=="dotnet-sdk-linux-x64.tar.gz") | .url') && \
+    echo "✅ Extracted Download URL: $DOWNLOAD_URL" && \
+    if [ -z "$DOWNLOAD_URL" ]; then echo "❌ ERROR: Failed to fetch .NET SDK download URL!" && exit 1; fi && \
+    echo "Downloading .NET SDK from $DOWNLOAD_URL" && \
+    wget -O /tmp/dotnet.tar.gz "$DOWNLOAD_URL" && \
+    mkdir -p /opt/dotnet && \
+    tar -zxf /tmp/dotnet.tar.gz -C /opt/dotnet && \
+    ln -sf /opt/dotnet/dotnet /usr/bin/dotnet && \
+    rm -rf /tmp/dotnet.tar.gz
 
-# Remove existing .NET SDKs
-RUN rm -rf /usr/share/dotnet
+# Add buildagent user to Docker group
+RUN usermod -aG docker buildagent
 
-# Download and install .NET SDK
+# Run verification steps for .NET installation
+RUN dotnet help && dotnet --info
 
-RUN METADATA_URL="https://dotnetcli.blob.core.windows.net/dotnet/release-metadata/$dotnetSdkVersion/releases.json" \
-    && LATEST_SDK=$(curl -s $METADATA_URL | jq -r '.latestSDK') \
-    && DOWNLOAD_URL=$(curl -s $METADATA_URL | jq -r --arg SDK "$LATEST_SDK" \
-    '.releases[] | select(.sdk.version=="\($SDK)") | .sdk.files[] | select(.name=="dotnet-sdk-linux-x64.tar.gz" and .rid=="linux-x64") | .url') \
-    && if [ -z "$DOWNLOAD_URL" ]; then echo "❌ ERROR: Failed to fetch .NET SDK download URL!" && exit 1; fi \
-    && echo "Downloading .NET SDK from $DOWNLOAD_URL" \
-    && wget -O /tmp/dotnet.tar.gz "$DOWNLOAD_URL" \
-    && mkdir -p /opt/dotnet \
-    && tar -zxf /tmp/dotnet.tar.gz -C /opt/dotnet \
-    && ln -sf /opt/dotnet/dotnet /usr/bin/dotnet \
-    && rm -rf /tmp/dotnet.tar.gz \
-    && apt-get clean && rm -rf /var/lib/apt/lists/* \
-    && find /opt/dotnet -name "*.lzma" -type f -delete
-
-# Verify .NET installation
-RUN dotnet --info
-
+VOLUME /var/lib/docker
 USER buildagent
