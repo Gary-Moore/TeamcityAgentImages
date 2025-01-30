@@ -34,8 +34,6 @@ SHELL ["/bin/bash", "-c"]
 
 RUN curl -fsSL https://fnm.vercel.app/install | bash -s -- --install-dir /usr/local/bin --skip-shell
 
-RUN curl -fsSL https://fnm.vercel.app/install | bash -s -- --install-dir /usr/local/bin --skip-shell
-
 # Ensure fnm is available globally
 ENV PATH="/home/buildagent/.fnm:$PATH"
 ENV FNM_DIR="/home/buildagent/.fnm"
@@ -54,9 +52,9 @@ RUN mkdir -p /home/buildagent/.fnm && chmod -R 775 /home/buildagent/.fnm
 
 # Install Node.js and npm as buildagent
 RUN bash -c "source /etc/profile.d/fnm.sh && \
-    fnm install 18 && fnm use 18 && fnm default 18 && \
+    fnm install $nodeVersion && fnm use $nodeVersion && fnm default $nodeVersion && \
     npm install -g npm && \
-    chmod -R 775 $(npm root -g)"
+    mkdir -p $(npm root -g) && chmod -R 775 $(npm root -g)"
 
 # Ensure npm is in PATH for non-interactive shells
 RUN echo 'source /etc/profile.d/fnm.sh' >> ~/.bashrc && \
