@@ -37,16 +37,17 @@ WORKDIR /home/buildagent
 RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash && \
     export NVM_DIR="/home/buildagent/.nvm" && \
     [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && \
+    echo "Installing Node.js version: $nodeVersion..." && \
     nvm install $nodeVersion && \
     nvm use $nodeVersion && \
     nvm alias default $nodeVersion && \
-    chmod +x $NVM_DIR/versions/node/v$nodeVersion/bin/npm && \
-    echo "✅ Fixed npm permissions" && \
-    echo "export NVM_DIR=\"/home/buildagent/.nvm\"" >> /etc/profile.d/nvm.sh && \
-    echo "[ -s \"\$NVM_DIR/nvm.sh\" ] && . \"\$NVM_DIR/nvm.sh\"" >> /etc/profile.d/nvm.sh && \
-    echo "export PATH=\"\$NVM_DIR/versions/node/v$nodeVersion/bin:\$PATH\"" >> /etc/profile.d/nvm.sh && \
-    source /etc/profile.d/nvm.sh && \
-    echo "✅ Installed Node.js version:" && node -v && \
+    export INSTALLED_NODE_VERSION=$(nvm which current | grep -oE 'v[0-9]+.[0-9]+.[0-9]+') && \
+    echo "✅ Installed Node.js version: $INSTALLED_NODE_VERSION" && \
+    echo "export NVM_DIR=\"/home/buildagent/.nvm\"" >> /home/buildagent/.bashrc && \
+    echo "[ -s \"\$NVM_DIR/nvm.sh\" ] && . \"\$NVM_DIR/nvm.sh\"" >> /home/buildagent/.bashrc && \
+    echo "export PATH=\"\$NVM_DIR/versions/node/$INSTALLED_NODE_VERSION/bin:\$PATH\"" >> /home/buildagent/.bashrc && \
+    echo "✅ Setting permissions for npm..." && \
+    chmod +x "$NVM_DIR/versions/node/$INSTALLED_NODE_VERSION/bin/npm" && \
     echo "✅ Installed npm version:" && npm -v
 
 VOLUME /var/lib/docker
