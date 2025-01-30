@@ -34,24 +34,12 @@ USER buildagent
 WORKDIR /home/buildagent
 
 # Install Node.js
-RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash && \
-    export NVM_DIR="/home/buildagent/.nvm" && \
-    [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && \
-    echo "Installing Node.js version: $nodeVersion..." && \
-    nvm install $nodeVersion && \
-    nvm use $nodeVersion && \
-    nvm alias default $nodeVersion && \
-    export PATH="$NVM_DIR/versions/node/$(nvm current)/bin:$PATH" && \
-    echo "✅ Installed Node.js version: $(nvm current)" && \
-    echo "export NVM_DIR=\"$NVM_DIR\"" >> /home/buildagent/.bashrc && \
-    echo "[ -s \"$NVM_DIR/nvm.sh\" ] && . \"$NVM_DIR/nvm.sh\"" >> /home/buildagent/.bashrc && \
-    echo "export PATH=\"$NVM_DIR/versions/node/$(nvm current)/bin:\$PATH\"" >> /home/buildagent/.bashrc && \
-    echo "✅ Installed npm version:" && npm -v
 
-# Verify npm installation
-RUN export NVM_DIR="/home/buildagent/.nvm" && \
-    [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && \
-    echo "PATH: $PATH" && \
-    npm -v
+RUN curl -o- https://fnm.vercel.app/install | bash && \
+    fnm install $nodeVersion && \
+    fnm use $nodeVersion && \
+    fnm default $nodeVersion && \
+    echo "✅ Installed Node.js version:" && node -v && \
+    echo "✅ Installed npm version:" && npm -v
 
 VOLUME /var/lib/docker
