@@ -42,8 +42,9 @@ RUN mkdir -p /home/buildagent/.fnm/bin && \
 # Ensure fnm is globally available
 ENV PATH="/home/buildagent/.fnm/bin:$PATH"
 
-# Install Node.js using fnm
-RUN fnm install $nodeVersion && \
+# Install Node.js using fnm (without sourcing profile files)
+RUN eval "$(fnm env --shell=sh)" && \
+    fnm install $nodeVersion && \
     fnm use $nodeVersion && \
     fnm default $nodeVersion && \
     echo "✅ Installed Node.js version:" && node -v && \
