@@ -29,38 +29,14 @@ RUN rm -rf /usr/share/dotnet && \
     usermod -aG docker buildagent && \
     dotnet help && dotnet --info
 
-
-# Install fnm (Fast Node Manager) manually
-# Install fnm (Fast Node Manager) and manually configure shell
-RUN curl -fsSL https://fnm.vercel.app/install | bash && \
-    export FNM_DIR="/home/buildagent/.fnm" && \
-    mkdir -p /home/buildagent/.config/fnm && \
-    echo "export FNM_DIR=\"/home/buildagent/.fnm\"" >> /home/buildagent/.bashrc && \
-    echo "eval \"\$(fnm env --shell=bash)\"" >> /home/buildagent/.bashrc && \
-    echo "export PATH=\"$FNM_DIR:$PATH\"" | tee -a /etc/profile /home/buildagent/.bashrc > /dev/null && \
-    chmod +x /home/buildagent/.fnm/fnm && \
-    echo "✅ fnm installed successfully"
-
-# Ensure fnm is globally available in all shells
-RUN echo "export PATH=\"/home/buildagent/.fnm/bin:\$PATH\"" | tee -a /etc/profile /etc/bash.bashrc > /dev/null && \
-    echo "eval \"\$(fnm env --shell=bash)\"" | tee -a /etc/profile /etc/bash.bashrc > /dev/null && \
-    chmod +x /home/buildagent/.fnm/bin/fnm && \
-    echo "✅ fnm environment configured globally"
-
 # Set default shell to bash
 SHELL ["/bin/bash", "-c"]
 
-# Install Node.js using fnm and persist globally
-RUN source /etc/profile && \
+# Install fnm (Fast Node Manager) manually
+RUN curl -o- https://fnm.vercel.app/install | bash && \
     fnm install $nodeVersion && \
     fnm use $nodeVersion && \
     fnm default $nodeVersion && \
-    export NODE_PATH="$(fnm exec -- node -p 'process.execPath')" && \
-    export NPM_DIR="$(fnm exec -- npm -g bin)" && \
-    export NPX_PATH="$NPM_DIR/npx" && \
-    ln -sf "$NODE_PATH" /usr/bin/node && \
-    ln -sf "$NPM_DIR/npm" /usr/bin/npm && \
-    ln -sf "$NPX_PATH" /usr/bin/npx && \
     echo "✅ Installed Node.js version:" && node -v && \
     echo "✅ Installed npm version:" && npm -v
 
