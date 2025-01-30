@@ -34,20 +34,29 @@ SHELL ["/bin/bash", "-c"]
 
 RUN curl -fsSL https://fnm.vercel.app/install | bash -s -- --install-dir /usr/local/bin --skip-shell
 
-ENV PATH="/root/.fnm:$PATH"
-ENV FNM_DIR="/root/.fnm"
+ENV PATH="/home/buildagent/.fnm:$PATH"
+ENV FNM_DIR="/home/buildagent/.fnm"
 
+# Create profile script for fnm
 RUN echo 'export PATH="$FNM_DIR:$PATH"' | tee -a /etc/profile.d/fnm.sh /etc/profile && \
     echo 'eval "$(fnm env --shell bash)"' | tee -a /etc/profile.d/fnm.sh /etc/profile && \
     chmod +x /etc/profile.d/fnm.sh
 
-# Set default Node.js version and install npm globally
+USER buildagent
+WORKDIR /home/buildagent
+
+# Ensure fnm directory exists
+RUN mkdir -p /home/buildagent/.fnm && chmod -R 775 /home/buildagent/.fnm
+
+# Install Node.js and npm as buildagent
 RUN source /etc/profile.d/fnm.sh && \
     fnm install 18 && fnm use 18 && fnm default 18 && \
-    npm install -g npm
+    npm install -g npm && \
+    chmod -R 775 $(npm root -g)
 
-# Ensure the TeamCity agent user has access
-RUN mkdir -p /home/buildagent/.fnm && chown -R buildagent:buildagent /home/buildagent/.fnm
+# Ensure npm is in PATH for non-interactive shells
+RUN echo 'source /etc/profile.d/fnm.sh' >> ~/.bashrc && \
+    echo '. /etc/profile.d/fnm.sh' >> ~/.profile
 
 VOLUME /var/lib/docker
 USER buildagent
