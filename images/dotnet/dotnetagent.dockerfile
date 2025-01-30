@@ -46,8 +46,6 @@ RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | b
     echo "export NVM_DIR=\"/home/buildagent/.nvm\"" >> /home/buildagent/.bashrc && \
     echo "[ -s \"\$NVM_DIR/nvm.sh\" ] && . \"\$NVM_DIR/nvm.sh\"" >> /home/buildagent/.bashrc && \
     echo "export PATH=\"\$NVM_DIR/versions/node/$INSTALLED_NODE_VERSION/bin:\$PATH\"" >> /home/buildagent/.bashrc && \
-    echo "✅ Setting permissions for npm..." && \
-    chmod +x "$NVM_DIR/versions/node/$INSTALLED_NODE_VERSION/bin/npm" && \
     echo "✅ Installed npm version:" && npm -v
 
 VOLUME /var/lib/docker
