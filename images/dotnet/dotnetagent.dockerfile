@@ -48,4 +48,10 @@ RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | b
     echo "export PATH=\"$NVM_DIR/versions/node/$(nvm current)/bin:\$PATH\"" >> /home/buildagent/.bashrc && \
     echo "✅ Installed npm version:" && npm -v
 
+# Verify npm installation
+RUN export NVM_DIR="/home/buildagent/.nvm" && \
+    [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && \
+    echo "PATH: $PATH" && \
+    npm -v
+
 VOLUME /var/lib/docker
