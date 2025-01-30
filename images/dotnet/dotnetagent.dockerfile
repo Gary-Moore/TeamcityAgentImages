@@ -40,9 +40,12 @@ RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | b
     nvm install $nodeVersion && \
     nvm use $nodeVersion && \
     nvm alias default $nodeVersion && \
-    echo "export NVM_DIR=\"/home/buildagent/.nvm\"" >> /home/buildagent/.bashrc && \
-    echo "[ -s \"\$NVM_DIR/nvm.sh\" ] && . \"\$NVM_DIR/nvm.sh\"" >> /home/buildagent/.bashrc && \
-    echo "export PATH=\"\$NVM_DIR/versions/node/v$nodeVersion/bin:\$PATH\"" >> /home/buildagent/.bashrc && \
+    chmod +x $NVM_DIR/versions/node/v$nodeVersion/bin/npm && \
+    echo "✅ Fixed npm permissions" && \
+    echo "export NVM_DIR=\"/home/buildagent/.nvm\"" >> /etc/profile.d/nvm.sh && \
+    echo "[ -s \"\$NVM_DIR/nvm.sh\" ] && . \"\$NVM_DIR/nvm.sh\"" >> /etc/profile.d/nvm.sh && \
+    echo "export PATH=\"\$NVM_DIR/versions/node/v$nodeVersion/bin:\$PATH\"" >> /etc/profile.d/nvm.sh && \
+    source /etc/profile.d/nvm.sh && \
     echo "✅ Installed Node.js version:" && node -v && \
     echo "✅ Installed npm version:" && npm -v
 
