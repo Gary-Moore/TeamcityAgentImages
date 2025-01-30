@@ -30,7 +30,7 @@ RUN rm -rf /usr/share/dotnet && \
     dotnet help && dotnet --info
 
 
-# Install fnm (Fast Node Manager) and manually configure shell
+# Install fnm (Fast Node Manager) manually
 RUN mkdir -p /home/buildagent/.fnm/bin && \
     curl -fsSL https://github.com/Schniz/fnm/releases/latest/download/fnm-linux.zip -o /tmp/fnm.zip && \
     unzip /tmp/fnm.zip -d /home/buildagent/.fnm/bin && \
@@ -45,8 +45,9 @@ ENV PATH="/home/buildagent/.fnm/bin:$PATH"
 # Set default shell to bash
 SHELL ["/bin/bash", "-c"]
 
-# Install Node.js using fnm (without sourcing profile files)
-RUN eval "$(fnm env --shell=sh)" && \
+# Install Node.js using fnm
+RUN eval "$(fnm env --shell=bash)" && \
+    export PATH="$(fnm env --shell=bash | grep 'export PATH' | cut -d'\"' -f2):$PATH" && \
     fnm install $nodeVersion && \
     fnm use $nodeVersion && \
     fnm default $nodeVersion && \
