@@ -32,13 +32,24 @@ RUN rm -rf /usr/share/dotnet && \
 # Set default shell to bash
 SHELL ["/bin/bash", "-c"]
 
-# Install fnm (Fast Node Manager) manually
-RUN curl -o- https://fnm.vercel.app/install | bash && \
-    fnm install $nodeVersion && \
-    fnm use $nodeVersion && \
-    fnm default $nodeVersion && \
-    echo "✅ Installed Node.js version:" && node -v && \
-    echo "✅ Installed npm version:" && npm -v
+RUN curl -fsSL https://fnm.vercel.app/install | bash -s -- --install-dir /usr/local/bin --skip-shell
+
+ENV PATH="/root/.fnm:$PATH"
+ENV FNM_DIR="/root/.fnm"
+
+RUN echo 'export PATH="$FNM_DIR:$PATH"' | tee -a /etc/profile.d/fnm.sh /etc/profile && \
+    echo 'eval "$(fnm env --shell bash)"' | tee -a /etc/profile.d/fnm.sh /etc/profile && \
+    chmod +x /etc/profile.d/fnm.sh
+
+# Set default Node.js version and install npm globally
+RUN source /etc/profile.d/fnm.sh && \
+    fnm install 18 && fnm use 18 && fnm default 18 && \
+    npm install -g npm
+
+# Ensure the TeamCity agent user has access
+RUN mkdir -p /home/buildagent/.fnm && chown -R buildagent:buildagent /home/buildagent/.fnm
 
 VOLUME /var/lib/docker
 USER buildagent
+
+
