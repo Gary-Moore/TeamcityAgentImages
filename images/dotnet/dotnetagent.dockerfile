@@ -54,9 +54,9 @@ RUN source /etc/profile && \
     fnm install $nodeVersion && \
     fnm use $nodeVersion && \
     fnm default $nodeVersion && \
-    ln -sf "$(fnm which node)" /usr/bin/node && \
-    ln -sf "$(fnm which npm)" /usr/bin/npm && \
-    ln -sf "$(fnm which npx)" /usr/bin/npx && \
+    ln -sf "$(fnm current node)" /usr/bin/node && \
+    ln -sf "$(fnm current npm)" /usr/bin/npm && \
+    ln -sf "$(fnm current npx)" /usr/bin/npx && \
     echo "✅ Installed Node.js version:" && node -v && \
     echo "✅ Installed npm version:" && npm -v
 
