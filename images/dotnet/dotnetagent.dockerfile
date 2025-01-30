@@ -29,12 +29,8 @@ RUN rm -rf /usr/share/dotnet && \
     usermod -aG docker buildagent && \
     dotnet help && dotnet --info
 
-# Switch to buildagent user for Node.js installation
-USER buildagent
-WORKDIR /home/buildagent
 
 # Install fnm (Fast Node Manager) and manually configure shell
-# Install fnm manually (without the auto-installer)
 RUN mkdir -p /home/buildagent/.fnm/bin && \
     curl -fsSL https://github.com/Schniz/fnm/releases/latest/download/fnm-linux.zip -o /tmp/fnm.zip && \
     unzip /tmp/fnm.zip -d /home/buildagent/.fnm/bin && \
@@ -54,3 +50,4 @@ RUN fnm install $nodeVersion && \
     echo "✅ Installed npm version:" && npm -v
 
 VOLUME /var/lib/docker
+USER buildagent
