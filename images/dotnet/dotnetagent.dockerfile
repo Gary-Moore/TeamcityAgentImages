@@ -41,11 +41,11 @@ RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | b
     nvm install $nodeVersion && \
     nvm use $nodeVersion && \
     nvm alias default $nodeVersion && \
-    export INSTALLED_NODE_VERSION=$(nvm which current | grep -oE 'v[0-9]+.[0-9]+.[0-9]+') && \
-    echo "✅ Installed Node.js version: $INSTALLED_NODE_VERSION" && \
-    echo "export NVM_DIR=\"/home/buildagent/.nvm\"" >> /home/buildagent/.bashrc && \
-    echo "[ -s \"\$NVM_DIR/nvm.sh\" ] && . \"\$NVM_DIR/nvm.sh\"" >> /home/buildagent/.bashrc && \
-    echo "export PATH=\"\$NVM_DIR/versions/node/$INSTALLED_NODE_VERSION/bin:\$PATH\"" >> /home/buildagent/.bashrc && \
+    export PATH="$NVM_DIR/versions/node/$(nvm current)/bin:$PATH" && \
+    echo "✅ Installed Node.js version: $(nvm current)" && \
+    echo "export NVM_DIR=\"$NVM_DIR\"" >> /home/buildagent/.bashrc && \
+    echo "[ -s \"$NVM_DIR/nvm.sh\" ] && . \"$NVM_DIR/nvm.sh\"" >> /home/buildagent/.bashrc && \
+    echo "export PATH=\"$NVM_DIR/versions/node/$(nvm current)/bin:\$PATH\"" >> /home/buildagent/.bashrc && \
     echo "✅ Installed npm version:" && npm -v
 
 VOLUME /var/lib/docker
