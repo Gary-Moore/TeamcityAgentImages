@@ -33,9 +33,18 @@ RUN rm -rf /usr/share/dotnet && \
 USER buildagent
 WORKDIR /home/buildagent
 
-# Install Node.js
+# Install fnm
+RUN curl -fsSL https://fnm.vercel.app/install | bash && \
+    export FNM_DIR="/home/buildagent/.fnm" && \
+    mkdir -p /home/buildagent/.config/fnm && \
+    echo "export FNM_DIR=\"/home/buildagent/.fnm\"" >> /home/buildagent/.shrc && \
+    echo "eval \"\$(fnm env --shell sh)\"" >> /home/buildagent/.shrc && \
+    echo "export PATH=\"$FNM_DIR:$PATH\"" | tee -a /etc/profile /home/buildagent/.shrc > /dev/null && \
+    chmod +x /home/buildagent/.fnm/fnm && \
+    echo "✅ fnm installed successfully"
 
-RUN curl -o- https://fnm.vercel.app/install | bash && \
+# Install Node.js using fnm
+RUN source /home/buildagent/.shrc && \
     fnm install $nodeVersion && \
     fnm use $nodeVersion && \
     fnm default $nodeVersion && \
