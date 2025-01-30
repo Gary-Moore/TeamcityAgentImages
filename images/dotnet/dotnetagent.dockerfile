@@ -33,18 +33,19 @@ RUN rm -rf /usr/share/dotnet && \
 USER buildagent
 WORKDIR /home/buildagent
 
-# Install fnm
+# Install fnm (Fast Node Manager) and manually configure shell
 RUN curl -fsSL https://fnm.vercel.app/install | bash && \
     export FNM_DIR="/home/buildagent/.fnm" && \
     mkdir -p /home/buildagent/.config/fnm && \
-    echo "export FNM_DIR=\"/home/buildagent/.fnm\"" >> /home/buildagent/.shrc && \
-    echo "eval \"\$(fnm env --shell sh)\"" >> /home/buildagent/.shrc && \
-    echo "export PATH=\"$FNM_DIR:$PATH\"" | tee -a /etc/profile /home/buildagent/.shrc > /dev/null && \
-    chmod +x /home/buildagent/.fnm/fnm && \
+    echo "export FNM_DIR=\"/home/buildagent/.fnm\"" | tee -a /etc/profile /home/buildagent/.shrc > /dev/null && \
+    echo "export PATH=\"$FNM_DIR/bin:$PATH\"" | tee -a /etc/profile /home/buildagent/.shrc > /dev/null && \
+    echo "eval \"\$(fnm env --use-on-cd --shell=sh)\"" | tee -a /etc/profile /home/buildagent/.shrc > /dev/null && \
+    chmod +x /home/buildagent/.fnm/bin/fnm && \
+    ln -sf /home/buildagent/.fnm/bin/fnm /usr/local/bin/fnm && \
     echo "✅ fnm installed successfully"
 
 # Install Node.js using fnm
-RUN source /home/buildagent/.shrc && \
+RUN source /etc/profile && \
     fnm install $nodeVersion && \
     fnm use $nodeVersion && \
     fnm default $nodeVersion && \
