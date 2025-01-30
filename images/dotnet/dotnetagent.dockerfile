@@ -34,19 +34,20 @@ USER buildagent
 WORKDIR /home/buildagent
 
 # Install fnm (Fast Node Manager) and manually configure shell
-RUN curl -fsSL https://fnm.vercel.app/install | bash && \
-    export FNM_DIR="/home/buildagent/.fnm" && \
-    mkdir -p /home/buildagent/.config/fnm && \
-    echo "export FNM_DIR=\"/home/buildagent/.fnm\"" | tee -a /etc/profile /home/buildagent/.shrc > /dev/null && \
-    echo "export PATH=\"$FNM_DIR/bin:$PATH\"" | tee -a /etc/profile /home/buildagent/.shrc > /dev/null && \
-    echo "eval \"\$(fnm env --use-on-cd --shell=sh)\"" | tee -a /etc/profile /home/buildagent/.shrc > /dev/null && \
+# Install fnm manually (without the auto-installer)
+RUN mkdir -p /home/buildagent/.fnm/bin && \
+    curl -fsSL https://github.com/Schniz/fnm/releases/latest/download/fnm-linux.zip -o /tmp/fnm.zip && \
+    unzip /tmp/fnm.zip -d /home/buildagent/.fnm/bin && \
+    rm -rf /tmp/fnm.zip && \
     chmod +x /home/buildagent/.fnm/bin/fnm && \
     ln -sf /home/buildagent/.fnm/bin/fnm /usr/local/bin/fnm && \
-    echo "✅ fnm installed successfully"
+    echo "✅ fnm installed manually"
+
+# Ensure fnm is globally available
+ENV PATH="/home/buildagent/.fnm/bin:$PATH"
 
 # Install Node.js using fnm
-RUN source /etc/profile && \
-    fnm install $nodeVersion && \
+RUN fnm install $nodeVersion && \
     fnm use $nodeVersion && \
     fnm default $nodeVersion && \
     echo "✅ Installed Node.js version:" && node -v && \
