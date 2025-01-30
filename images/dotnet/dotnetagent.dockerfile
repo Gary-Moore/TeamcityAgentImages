@@ -39,18 +39,24 @@ RUN mkdir -p /home/buildagent/.fnm/bin && \
     ln -sf /home/buildagent/.fnm/bin/fnm /usr/local/bin/fnm && \
     echo "✅ fnm installed manually"
 
-# Ensure fnm is globally available
-ENV PATH="/home/buildagent/.fnm/bin:$PATH"
+# Ensure fnm is globally available in all shells
+RUN echo "export FNM_DIR=\"/home/buildagent/.fnm\"" | tee -a /etc/profile /etc/bash.bashrc > /dev/null && \
+    echo "export PATH=\"/home/buildagent/.fnm/bin:\$PATH\"" | tee -a /etc/profile /etc/bash.bashrc > /dev/null && \
+    echo "eval \"\$(fnm env --shell=bash)\"" | tee -a /etc/profile /etc/bash.bashrc > /dev/null && \
+    chmod +x /home/buildagent/.fnm/bin/fnm && \
+    echo "✅ fnm environment configured globally"
 
 # Set default shell to bash
 SHELL ["/bin/bash", "-c"]
 
-# Install Node.js using fnm
-RUN eval "$(fnm env --shell=bash)" && \
-    export PATH="$(fnm env --shell=bash | grep 'export PATH' | cut -d'\"' -f2):$PATH" && \
+# Install Node.js using fnm and persist globally
+RUN source /etc/profile && \
     fnm install $nodeVersion && \
     fnm use $nodeVersion && \
     fnm default $nodeVersion && \
+    ln -sf "$(fnm which node)" /usr/bin/node && \
+    ln -sf "$(fnm which npm)" /usr/bin/npm && \
+    ln -sf "$(fnm which npx)" /usr/bin/npx && \
     echo "✅ Installed Node.js version:" && node -v && \
     echo "✅ Installed npm version:" && npm -v
 
