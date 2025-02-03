@@ -52,8 +52,7 @@ RUN mkdir -p /home/buildagent/.fnm && chmod -R 775 /home/buildagent/.fnm
 
 # Install Node.js and npm as buildagent
 RUN bash -c "source /etc/profile.d/fnm.sh && \
-    fnm install $nodeVersion && fnm use $nodeVersion && fnm default $nodeVersion && \
-    "
+    fnm install $nodeVersion && fnm use $nodeVersion && fnm default $nodeVersion"
 
 # Ensure npm is in PATH for non-interactive shells
 RUN echo 'source /etc/profile.d/fnm.sh' >> ~/.bashrc && \
