@@ -1,0 +1,7 @@
+# Ignore secrets and temporary files
+.env
+*.log
+image-info.txt
+*.DS_Store
+*.zip
+.dockerignore
