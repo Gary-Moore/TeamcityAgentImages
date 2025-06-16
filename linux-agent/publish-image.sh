@@ -83,9 +83,18 @@ if [[ -n "$DIGEST" ]]; then
     echo "📦 Image digest: $DIGEST"
     INFO_FILE="${TEAMCITY_BUILD_TEMP:-.}/image-info.txt"
 
-    if echo "IMAGE_NAME=${IMAGE_NAME}" > "$INFO_FILE" \
-    && echo "IMAGE_TAG=${TAG}" >> "$INFO_FILE" \
-    && echo "IMAGE_DIGEST=${DIGEST}" >> "$INFO_FILE"; then
+    # Temporarily disable strict mode for this block
+    set +e
+
+    echo "IMAGE_NAME=${IMAGE_NAME}" > "$INFO_FILE"
+    echo "IMAGE_TAG=${TAG}" >> "$INFO_FILE"
+    echo "IMAGE_DIGEST=${DIGEST}" >> "$INFO_FILE"
+    WRITE_EXIT_CODE=$?
+
+    # Re-enable strict mode
+    set -e
+
+    if [[ "$WRITE_EXIT_CODE" -eq 0 ]]; then
         [[ "$VERBOSE" -eq 1 ]] && echo "📝 Created artifact file: $INFO_FILE"
     else
         echo "⚠️ Warning: Failed to write image-info.txt to $INFO_FILE"
@@ -93,3 +102,4 @@ if [[ -n "$DIGEST" ]]; then
 else
     echo "⚠️ Warning: Unable to retrieve image digest from local inspect."
 fi
+
