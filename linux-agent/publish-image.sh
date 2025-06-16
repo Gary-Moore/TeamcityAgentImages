@@ -81,7 +81,7 @@ DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$FULL_TAG" 2>/dev/n
 
 if [[ -n "$DIGEST" ]]; then
     echo "📦 Image digest: $DIGEST"
-    INFO_FILE="${TEAMCITY_BUILD_TEMP:-.}/image-info.txt"
+    INFO_FILE="${TEAMCITY_BUILD_TEMP:-/tmp}/image-info.txt"
 
     # Temporarily disable strict mode for this block
     set +e
