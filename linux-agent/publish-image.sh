@@ -76,14 +76,20 @@ if [[ "$TAG_STANDARD" == "true" ]]; then
     [[ "$VERBOSE" -eq 1 ]] && echo "📌 Also pushed tag: standard"
 fi
 
+# Get image digest
 DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$FULL_TAG" 2>/dev/null || true)
 
 if [[ -n "$DIGEST" ]]; then
     echo "📦 Image digest: $DIGEST"
-    echo "IMAGE_NAME=${IMAGE_NAME}" > image-info.txt
-    echo "IMAGE_TAG=${TAG}" >> image-info.txt
-    echo "IMAGE_DIGEST=${DIGEST}" >> image-info.txt
-    [[ "$VERBOSE" -eq 1 ]] && echo "📝 Created artifact file: image-info.txt"
+    INFO_FILE="${TEAMCITY_BUILD_TEMP:-.}/image-info.txt"
+    {
+        echo "IMAGE_NAME=${IMAGE_NAME}"
+        echo "IMAGE_TAG=${TAG}"
+        echo "IMAGE_DIGEST=${DIGEST}"
+    } > "$INFO_FILE" || {
+        echo "⚠️ Warning: Failed to write image-info.txt to $INFO_FILE"
+    }
+    [[ "$VERBOSE" -eq 1 ]] && echo "📝 Created artifact file: $INFO_FILE"
 else
     echo "⚠️ Warning: Unable to retrieve image digest from local inspect."
 fi
