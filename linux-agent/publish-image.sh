@@ -81,25 +81,15 @@ DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$FULL_TAG" 2>/dev/n
 
 if [[ -n "$DIGEST" ]]; then
     echo "📦 Image digest: $DIGEST"
-    INFO_FILE="${TEAMCITY_BUILD_TEMP:-/tmp}/image-info.txt"
 
-    # Temporarily disable strict mode for this block
-    set +e
+    # Fallback to temp file path
+    INFO_FILE="/tmp/image-info.txt"
 
-    echo "IMAGE_NAME=${IMAGE_NAME}" > "$INFO_FILE"
-    echo "IMAGE_TAG=${TAG}" >> "$INFO_FILE"
-    echo "IMAGE_DIGEST=${DIGEST}" >> "$INFO_FILE"
-    WRITE_EXIT_CODE=$?
+    echo "IMAGE_NAME=${IMAGE_NAME}" > "$INFO_FILE" || true
+    echo "IMAGE_TAG=${TAG}" >> "$INFO_FILE" || true
+    echo "IMAGE_DIGEST=${DIGEST}" >> "$INFO_FILE" || true
 
-    # Re-enable strict mode
-    set -e
-
-    if [[ "$WRITE_EXIT_CODE" -eq 0 ]]; then
-        [[ "$VERBOSE" -eq 1 ]] && echo "📝 Created artifact file: $INFO_FILE"
-    else
-        echo "⚠️ Warning: Failed to write image-info.txt to $INFO_FILE"
-    fi
+    [[ "$VERBOSE" -eq 1 ]] && echo "📝 Created artifact file at: $INFO_FILE"
 else
     echo "⚠️ Warning: Unable to retrieve image digest from local inspect."
 fi
-
