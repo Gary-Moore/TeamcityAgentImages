@@ -8,6 +8,8 @@ DOCKERFILE="Dockerfile"
 BUILD_CONTEXT="."
 BASE_IMAGE="jetbrains/teamcity-agent:2025.03-linux-sudo"
 VERBOSE=0
+# Collect additional --build-arg options
+BUILD_ARGS=()
 
 show_help() {
     echo ""
@@ -27,7 +29,6 @@ show_help() {
 }
 
 if [ $# -eq 0 ]; then show_help; exit 1; fi
-
 while [[ "$#" -gt 0 ]]; do
     case $1 in
         -n) IMAGE_NAME="$2"; shift ;;
@@ -35,12 +36,14 @@ while [[ "$#" -gt 0 ]]; do
         -f) DOCKERFILE="$2"; shift ;;
         -c) BUILD_CONTEXT="$2"; shift ;;
         -b) BASE_IMAGE="$2"; shift ;;
+        --build-arg) BUILD_ARGS+=("--build-arg" "$2"); shift ;;
         --verbose) VERBOSE=1 ;;
         -h|--help) show_help; exit 0 ;;
         *) echo "❌ Unknown option: $1"; show_help; exit 1 ;;
     esac
     shift
 done
+
 
 # Check if Docker is available
 if ! command -v docker &> /dev/null; then
@@ -74,12 +77,12 @@ echo "    Version    : $VERSION"
 if [ "$VERBOSE" -eq 1 ]; then
     echo ""
     echo "Running the following Docker command:"
-    echo "docker build -f \"$DOCKERFILE_PATH\" --build-arg BASE_IMAGE=$BASE_IMAGE -t \"$IMAGE_NAME:$TAG\" --label \"org.opencontainers.image.version=$VERSION\" \"$BUILD_CONTEXT_PATH\""
+    echo "docker build -f \"$DOCKERFILE_PATH\" --build-arg BASE_IMAGE=$BASE_IMAGE ${BUILD_ARGS[*]} -t \"$IMAGE_NAME:$TAG\" --label \"org.opencontainers.image.version=$VERSION\" \"$BUILD_CONTEXT_PATH\""
     echo ""
 fi
 
 # Build the Docker image with the version label
-if docker build -f "$DOCKERFILE_PATH" --build-arg BASE_IMAGE=$BASE_IMAGE -t "$IMAGE_NAME:$TAG" --label "org.opencontainers.image.version=$VERSION" "$BUILD_CONTEXT_PATH"; then
+if docker build -f "$DOCKERFILE_PATH" --build-arg BASE_IMAGE=$BASE_IMAGE "${BUILD_ARGS[@]}" -t "$IMAGE_NAME:$TAG" --label "org.opencontainers.image.version=$VERSION" "$BUILD_CONTEXT_PATH"; then
     echo "✅ Build completed successfully: $IMAGE_NAME:$TAG"
 else
     echo "❌ Build failed."
