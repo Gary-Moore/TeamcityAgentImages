@@ -51,16 +51,28 @@ if [[ "$VERBOSE" -eq 1 ]]; then
 fi
 
 # Push the image with the provided tag
-docker push "$FULL_TAG" || {echo "❌ Error: Failed to push image: $FULL_TAG"; exit 1;}
+# Push the image with the provided tag
+if ! docker push "$FULL_TAG"; then
+    echo "❌ Error: Failed to push image: $FULL_TAG"
+    exit 1
+fi
 
 # Tag and push additional tags if requested
 if [[ "$TAG_LATEST" == "true" ]]; then
-    docker tag "$FULL_TAG" "${IMAGE_NAME}:latest" && docker push "${IMAGE_NAME}:latest" || {echo "❌ Error: Failed to push tag: latest"; exit 1;}
+    docker tag "$FULL_TAG" "${IMAGE_NAME}:latest"
+    if ! docker push "${IMAGE_NAME}:latest"; then
+        echo "❌ Error: Failed to push tag: latest"
+        exit 1
+    fi
     [[ "$VERBOSE" -eq 1 ]] && echo "📌 Also pushed tag: latest"
 fi
 
 if [[ "$TAG_STANDARD" == "true" ]]; then
-    docker tag "$FULL_TAG" "${IMAGE_NAME}:standard" && docker push "${IMAGE_NAME}:standard" || {echo "❌ Error: Failed to push tag: standard"; exit 1;}
+    docker tag "$FULL_TAG" "${IMAGE_NAME}:standard"
+    if ! docker push "${IMAGE_NAME}:standard"; then
+        echo "❌ Error: Failed to push tag: standard"
+        exit 1
+    fi
     [[ "$VERBOSE" -eq 1 ]] && echo "📌 Also pushed tag: standard"
 fi
 
