@@ -14,7 +14,11 @@ Each agent has its own build process. The build scripts will:
 
 ### Authenticating to Azure Container Registry (ACR)
 
-Before building or pushing any images, ensure that you are authenticated to Azure Container Registry. If you're working with a private registry, you'll need to log in using the following command:
+Before building or pushing any images, ensure you are authenticated to Azure Container Registry.
+
+#### Local Development
+
+For interactive local use, run:
 
 ```bash
 az acr login --name myacr
@@ -22,27 +26,65 @@ az acr login --name myacr
 
 Replace `myacr` with your Azure Container Registry name.
 
-If you don't have the Azure CLI installed, follow the [official installation guide](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli) to install it.
+#### CI/CD (TeamCity)
 
-### Versioning the Image
+In CI pipelines (e.g., TeamCity), authentication is performed using a **service principal**. Set the following TeamCity environment variables (marked as hidden/secure):
+
+- `AZURE_CLIENT_ID`
+- `AZURE_CLIENT_SECRET`
+- `AZURE_TENANT_ID`
+
+Then use the following login command in a build step before pushing to ACR:
+
+```bash
+az login --service-principal \
+  --username "$AZURE_CLIENT_ID" \
+  --password "$AZURE_CLIENT_SECRET" \
+  --tenant "$AZURE_TENANT_ID"
+
+az acr login --name myacr
+```
+
+These credentials should be stored securely as TeamCity environment variables:
+
+* `AZURE_CLIENT_ID`
+
+* `AZURE_CLIENT_SECRET`
+
+* `AZURE_TENANT_ID`
+
 
 The build process requires a version number to tag the image. This version is automatically generated from your Git tags and stored in the `VERSION.txt` file.
 
-To generate the `version.txt` file:
-
-1. **Generate Version File:**
+### To generate the `VERSION.txt` file:
 
 ```bash
 ./scripts/generate-version.sh
 ```
 
-This script will create a `VERSION.txt` file that contains the latest version based on your Git tags or commit number.
+The build script will fail if `VERSION.txt` is missing.
 
-2. **Ensure Version.txt is present before building**:
+### TeamCity Tip
 
-The `build-image.sh` script will check for the existence of `VERSION.txt`. If it's missing, the build will fail. Ensure that you run the version generation script before attempting to build the image.
+In TeamCity, run `generate-version.sh` as a build step before `build-image.sh`. As a fallback, you may use `%build.vcs.number%` or date-based tags.
 
- 🐋 Agent Image Publishing Strategy
+## Image Testing
+
+Use the provided script to validate that your built image contains the correct tools.
+
+### Default Check (e.g., .NET and Node.js):
+
+```bash
+./test-image.sh -n teamcity-agent-dotnet8-node20 -t latest
+```
+
+### Custom Check (e.g., Terraform agent):
+
+```bash
+./test-image.sh -n teamcity-terraform-agent -t latest -c "terraform version"
+```
+
+🐋 Agent Image Publishing Strategy
 
 ### Overview
 All TeamCity custom agent images are tagged using the following standard scheme:
@@ -81,7 +123,23 @@ All TeamCity custom agent images are tagged using the following standard scheme:
 
 ## Prerequisites
 
-* Docker must be installed on the system to build and test images.
-* You must be authenticated to Azure Container Registry (ACR) to push images.
-* Ensure TeamCity is properly configured to use the built images.
-* **Generate the `VERSION.txt` file** before building: `./scripts/generate-version.sh`
+- Docker must be installed on the build machine or agent.
+- Azure CLI must be installed (`az`) for authentication.
+- A valid Azure login or service principal must be configured.
+- `VERSION.txt` must be generated before running `build-image.sh`.
+
+## Troubleshooting
+
+### ACR Login Fails with `az login` Required
+
+Ensure you're authenticated with Azure:
+
+- Use `az login` locally
+- Use `az login --service-principal` in CI
+
+### "Docker: Cannot connect to the daemon"
+
+Ensure:
+- Docker is running on the agent host
+- The `buildagent` user is in the `docker` group
+- The agent has access to `/var/run/docker.sock`

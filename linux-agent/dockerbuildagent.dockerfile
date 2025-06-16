@@ -11,3 +11,13 @@ ARG dockerVersion=25.0.5
 
 USER root
 WORKDIR /opt/buildagent/work
+
+# OS-level security patching, install dependencies, and clean up
+RUN apt-get update && \
+    apt-get upgrade -y && \
+    apt-get install -y --no-install-recommends curl && \
+    apt-get clean
+
+# Add Azure CLI install
+RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash && \
+    az version
