@@ -1,22 +1,24 @@
 #!/bin/bash
 
+set -e
+
 # Default values
 IMAGE_NAME="teamcity-agent-dotnet8-node20"
 TAG="latest"
 TEST_COMMAND=""
 VERBOSE=0
 
-# Show help message
 show_help() {
     echo ""
-    echo "Docker Image Test Script"
+    echo "🧪 Docker Image Test Script"
     echo "-----------------------------"
     echo "Usage: ./test-image.sh [-n image-name] [-t tag] [-c test-command] [--verbose]"
     echo ""
     echo "Options:"
     echo "  -n   Docker image name (default: $IMAGE_NAME)"
     echo "  -t   Image tag (default: $TAG)"
-    echo "  -c   Test command to run inside the container (default: .NET and Node.js version checks)"
+    echo "  -c   Test command to run inside the container"
+    echo "       (default: 'dotnet --version && node --version')"
     echo "  --verbose        Enable verbose output"
     echo "  -h               Show help message"
     echo ""
@@ -35,26 +37,20 @@ while [[ "$#" -gt 0 ]]; do
     shift
 done
 
-FULL_IMAGE="$IMAGE_NAME:$TAG"
+FULL_IMAGE="${IMAGE_NAME}:${TAG}"
 
-# Use default test command if none provided
+# Default test command
 if [ -z "$TEST_COMMAND" ]; then
     TEST_COMMAND="dotnet --version && node --version"
 fi
 
-# Show verbose output if requested
-echo "🧪 Testing Docker image: $FULL_IMAGE"
 if [ "$VERBOSE" -eq 1 ]; then
-    echo "🔍 Test command: $TEST_COMMAND"
-    echo "📦 Running container..."
+    echo "🧪 Testing Docker image: $FULL_IMAGE"
+    echo "🔍 Command: $TEST_COMMAND"
 fi
 
-# Run the test command inside the container
-docker run --rm "$FULL_IMAGE" /bin/bash -c "$TEST_COMMAND"
-
-# Check the result of the test
-RESULT=$?
-if [ $RESULT -eq 0 ]; then
+# Run the test
+if docker run --rm "$FULL_IMAGE" sh -c "$TEST_COMMAND"; then
     echo "✅ Test passed: Image $FULL_IMAGE is functional."
     exit 0
 else

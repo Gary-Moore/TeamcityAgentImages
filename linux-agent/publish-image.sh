@@ -51,7 +51,6 @@ if [[ "$VERBOSE" -eq 1 ]]; then
 fi
 
 # Push the image with the provided tag
-# Push the image with the provided tag
 if ! docker push "$FULL_TAG"; then
     echo "❌ Error: Failed to push image: $FULL_TAG"
     exit 1
@@ -64,7 +63,7 @@ if [[ "$TAG_LATEST" == "true" ]]; then
         echo "❌ Error: Failed to push tag: latest"
         exit 1
     fi
-    [[ "$VERBOSE" -eq 1 ]] && echo "📌 Also pushed tag: latest"
+    [[ "$VERBOSE" -eq 1 ]] && echo "Also pushed tag: latest"
 fi
 
 if [[ "$TAG_STANDARD" == "true" ]]; then
@@ -73,7 +72,7 @@ if [[ "$TAG_STANDARD" == "true" ]]; then
         echo "❌ Error: Failed to push tag: standard"
         exit 1
     fi
-    [[ "$VERBOSE" -eq 1 ]] && echo "📌 Also pushed tag: standard"
+    [[ "$VERBOSE" -eq 1 ]] && echo "Also pushed tag: standard"
 fi
 
 # Get image digest
@@ -81,15 +80,13 @@ DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$FULL_TAG" 2>/dev/n
 
 if [[ -n "$DIGEST" ]]; then
     echo "📦 Image digest: $DIGEST"
-
-    # Fallback to temp file path
-    INFO_FILE="/tmp/image-info.txt"
+    INFO_FILE="/artifacts/image-info.txt"
 
     echo "IMAGE_NAME=${IMAGE_NAME}" > "$INFO_FILE" || true
     echo "IMAGE_TAG=${TAG}" >> "$INFO_FILE" || true
     echo "IMAGE_DIGEST=${DIGEST}" >> "$INFO_FILE" || true
 
-    [[ "$VERBOSE" -eq 1 ]] && echo "📝 Created artifact file at: $INFO_FILE"
+    [[ "$VERBOSE" -eq 1 ]] && echo "Created artifact file at: $INFO_FILE"
 else
     echo "⚠️ Warning: Unable to retrieve image digest from local inspect."
 fi
