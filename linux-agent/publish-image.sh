@@ -79,12 +79,15 @@ fi
 DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$FULL_TAG" 2>/dev/null || true)
 
 if [[ -n "$DIGEST" ]]; then
-    echo "📦 Image digest: $DIGEST"
-    INFO_FILE="/artifacts/image-info.txt"
 
-    echo "IMAGE_NAME=${IMAGE_NAME}" > "$INFO_FILE" || true
-    echo "IMAGE_TAG=${TAG}" >> "$INFO_FILE" || true
-    echo "IMAGE_DIGEST=${DIGEST}" >> "$INFO_FILE" || true
+    ARTIFACTS_DIR="./artifacts"
+    mkdir -p "$ARTIFACTS_DIR"
+
+    echo "📦 Image digest: $DIGEST"
+
+    echo "Image: $IMAGE_NAME" > "$ARTIFACTS_DIR/image-info.txt"
+    echo "Tag: $TAG" >> "$ARTIFACTS_DIR/image-info.txt"
+    echo "Digest: $IMAGE_DIGEST" >> "$ARTIFACTS_DIR/image-info.txt"
 
     [[ "$VERBOSE" -eq 1 ]] && echo "Created artifact file at: $INFO_FILE"
 else
