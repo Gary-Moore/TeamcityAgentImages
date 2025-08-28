@@ -3,7 +3,75 @@
 
 This repository contains custom TeamCity build agent images for Windows and Linux, along with supporting scripts for building and publishing these images to an Azure Container Registry (ACR). These images are designed to be used as TeamCity agents in our CI/CD pipeline.
 
-## 🚀 Build and Publish Workflow
+## 🚀 ACR Task Workflow (Current)
+
+Agent images are now built and published via ACR Tasks, which run multi-step build pipelines directly inside Azure. This avoids the need for local Docker builds inside TeamCity and ensures reproducibility.
+
+### Provisioning ACR Tasks
+
+An ACR Task must exist in your registry before you can trigger builds. This is handled idempotently by the script:
+```bash
+./scripts/provision-acr-task-linux.sh
+```
+
+This script will create or update the registered ACR Task (tc-agent-linux) that builds the Linux TeamCity agent. It validates all required environment variables before running.
+
+#### Example usage
+```bash
+# Azure SP credentials
+export AZ_TENANT_ID="xxxx-xxxx"
+export AZ_CLIENT_ID="xxxx-xxxx"
+export AZ_CLIENT_SECRET="super-secret"
+export AZ_SUBSCRIPTION_ID="xxxx-xxxx"
+export AZ_RESOURCE_GROUP="rg-container-reg"
+
+# ACR config
+export ACR_NAME="gammawebdevops"
+export ACR_TASK_NAME="tc-agent-linux"
+export TASK_FILE="acr/teamcity-agent.linux.yaml"
+export GIT_CONTEXT="https://github.com/Gary-Moore/TeamcityAgentImages.git#main"
+
+# GitHub access token (read-only scope for private repo)
+export GIT_ACCESS_TOKEN="ghp_xxxxxxxxxxxxxxxxxxx"
+
+# Run provisioning
+./scripts/provision-acr-task-linux.sh
+```
+
+On success:
+
+- Task is created or updated in ACR.
+- JSON definition is written to acr-task.json (publishable as a TeamCity artifact).
+- A summary table is printed.
+
+>⚠️ Note: Provisioning is a one-off or occasional operation (e.g. when YAML moves/changes). TeamCity build jobs should not re-run provisioning; they should only trigger the registered task.
+
+## Running ACR Tasks in TeamCity
+
+To build and publish images, TeamCity calls:
+```bash
+az acr task run \
+  -r acrname \
+  -n tc-agent-linux \
+  --set image_tag=2025.08-linux-sudo-dotnet8-node20 \
+  --set dotnet_sdk_version=8.0 \
+  --set node_major=20 \
+  --set base_image=jetbrains/teamcity-agent:2025.07-linux-sudo \
+  --set-secret entrust_sha256=xxxxxxxxxxxxxxxx \
+  --set entrust_url=https://crt.sectigo.com/EntrustOVTLSIssuingRSACA2.crt
+```
+
+This triggers the registered task, which:
+1. Builds the image with the correct .NET + Node versions.
+2. Runs the smoke test (test-image.sh).
+3. Pushes the image into ACR only if tests succeed.
+4. Writes runtime metadata (/opt/pds-runtime.json) which is extracted into a manifest.json artifact.
+
+---
+
+## 🐋 Legacy Build and Publish Workflow
+
+> ⚠️ Deprecated: The scripts below (build-image.sh, publish-image.sh) are retained in /legacy for reference but should no longer be used. All new images must be built via ACR Tasks as described above.
 
 Each agent has its own build process. The build scripts will:
 
@@ -143,3 +211,12 @@ Ensure:
 - Docker is running on the agent host
 - The `buildagent` user is in the `docker` group
 - The agent has access to `/var/run/docker.sock`
+
+## Reference
+
+- acr/teamcity-agent.linux.yaml → ACR Task definition (multi-step build/test/push).
+- linux-agent/ → Dockerfiles and smoke test for Linux agents.
+- windows-agent/ → Dockerfiles and smoke test for Windows agents.
+- scripts/provision-acr-task-linux.sh → Script to create/update the ACR Task.
+- scripts/acr-update.sh → Utilities for updating task values.
+- legacy/ → Old shell scripts for local build/publish (deprecated).
