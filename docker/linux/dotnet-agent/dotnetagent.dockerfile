@@ -113,6 +113,13 @@ RUN ln -sf /home/buildagent/.fnm/aliases/default/bin/node /usr/local/bin/node \
 ENV JAVA_HOME=/opt/java/openjdk
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
 
+RUN set -euo pipefail; \
+    DOTNET_VER="$(dotnet --version)"; \
+    NODE_VER="$(node --version)"; \
+    printf '{ "dotnet": { "channel": "%s", "version": "%s" }, "node": { "major": "%s", "version": "%s" } }\n' \
+      "${dotnetSdkVersion}" "${DOTNET_VER}" "${nodeVersion}" "${NODE_VER}" \
+      > /opt/pds-runtime.json
+
 LABEL org.opencontainers.image.title="GammaWeb TeamCity Linux Dotnet Agent" \
       org.opencontainers.image.source="https://github.com/Gary-Moore/TeamcityAgentImages" \
       org.opencontainers.image.created="${BUILD_DATE}" \
