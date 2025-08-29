@@ -11,6 +11,7 @@ set -euo pipefail
 : "${ACR_TASK_NAME:?Missing: set ACR_TASK_NAME for ACR task (e.g. mytask)}"
 
 : "${IMAGE_TAG:?Missing: set IMAGE_TAG for ACR task (e.g. latest)}"
+: "${BASE_IMAGE:?Missing: set BASE_IMAGE for ACR task (e.g. mcr.microsoft.com/dotnet/sdk:8.0)}"
 : "${DOTNET_SDK_VERSION:?Missing: set DOTNET_SDK_VERSION for ACR task (e.g. 8.0)}"
 : "${NODE_MAJOR:?Missing: set NODE_MAJOR for ACR task (e.g. 18)}"
 : "${ENTRUST_URL:?Missing: set ENTRUST_URL for ACR task (e.g. https://entrust.example.com)}"
@@ -27,7 +28,7 @@ RUN_JSON="$(az acr task run \
     --set image_tag="$IMAGE_TAG" \
     --set dotnet_sdk_version="$DOTNET_SDK_VERSION" \
     --set node_major="$NODE_MAJOR" \
-    --set base_images="$BASE_IMAGES" \
+    --set base_image="$BASE_IMAGE" \
     --set entrust_url="$ENTRUST_URL" \
     --set-secret entrust_sha256="$ENTRUST_SHA256" \
     --no-logs -o json)"
