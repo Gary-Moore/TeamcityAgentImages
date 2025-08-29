@@ -11,7 +11,7 @@ steps:
      --build-arg ENTRUST_INTERMEDIATE_SHA256={{.Values.entrust_sha256}}
      --build-arg VCS_REF={{.Run.SourceControlCommit}}
      --build-arg BUILD_DATE={{.Run.Date}}
-     -f docker/linux/Dockerfile
+     -f docker/linux/dotnetagent.dockerfile
      .
     id: build
 
