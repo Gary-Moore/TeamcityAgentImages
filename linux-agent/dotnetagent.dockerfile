@@ -10,6 +10,9 @@ FROM ${BASE_IMAGE}
 ARG dotnetSdkVersion=8.0
 ARG nodeVersion=20
 
+ARG VCS_REF
+ARG BUILD_DATE
+
 # CA download + pinning (pass via --build-arg)
 ARG ENTRUST_INTERMEDIATE_URL       # e.g. https://.../Entrust_OV_TLS_Issuing_RSA_CA_2.crt
 ARG ENTRUST_INTERMEDIATE_SHA256    # 64-hex chars
@@ -109,6 +112,11 @@ RUN ln -sf /home/buildagent/.fnm/aliases/default/bin/node /usr/local/bin/node \
 # Make sure the agent uses the patched JRE
 ENV JAVA_HOME=/opt/java/openjdk
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
+
+LABEL org.opencontainers.image.title="GammaWeb TeamCity Linux Dotnet Agent" \
+      org.opencontainers.image.source="https://github.com/Gary-Moore/TeamcityAgentImages" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.revision="${VCS_REF}"
 
 VOLUME /var/lib/docker
 USER buildagent
