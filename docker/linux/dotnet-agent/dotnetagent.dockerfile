@@ -118,6 +118,10 @@ LABEL org.opencontainers.image.title="GammaWeb TeamCity Linux Dotnet Agent" \
       org.opencontainers.image.created="${BUILD_DATE}" \
       org.opencontainers.image.revision="${VCS_REF}"
 
+# Copy smoke test into the image and make it executable
+COPY linux/dotnet-agent/test-image.sh /usr/local/bin/test-image.sh
+RUN chmod +x /usr/local/bin/test-image.sh
+
 VOLUME /var/lib/docker
 USER buildagent
 WORKDIR /home/buildagent
