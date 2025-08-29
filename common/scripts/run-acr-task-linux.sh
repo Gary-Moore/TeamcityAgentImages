@@ -35,6 +35,9 @@ RUN_JSON="$(az acr task run \
 
 RUN_ID="$(printf '%s' "$RUN_JSON" | jq -r '.runId')"
 echo "Queued ACR task run with ID: $RUN_ID"
+az acr task logs -r "$ACR" --run-id "$RUN_ID" \
+ | grep -oP 'PDS_RUNTIME_JSON:\s*\K\{.*\}' > pds-runtime.json
+
 
 # ---- Fetch logs and extract the delimited JSON ----
 LOG_TXT="$(az acr task logs -r "$ACR_NAME" --run-id "$RUN_ID")"
