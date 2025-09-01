@@ -32,7 +32,14 @@ RUN_JSON="$(az acr task run -r "$ACR_NAME" -n "$ACR_TASK_NAME" \
   "$@" \
   --no-logs --no-wait -o json)"
 
-RUN_ID="$(printf '%s' "$RUN_JSON" | jq -r '.runId')"
+# After RUN_JSON=...
+if command -v jq >/dev/null 2>&1; then
+  RUN_ID="$(printf '%s' "$RUN_JSON" | jq -r '.runId')"
+else
+  # naive JSON grab for "runId":"..."; good enough for az output
+  RUN_ID="$(printf '%s' "$RUN_JSON" | sed -n 's/.*"runId"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"
+fi
+
 if [[ -z "${RUN_ID:-}" || "$RUN_ID" == "null" ]]; then
   echo "ERROR: Could not determine ACR runId. Raw response:"
   echo "$RUN_JSON"
