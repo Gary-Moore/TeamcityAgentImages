@@ -35,7 +35,7 @@ RUN_JSON="$(az acr task run \
   -n "$ACR_TASK_NAME" \
   --set image_tag="$IMAGE_TAG" \
   "$@" \
-  --no-logs -o json)"
+  --no-logs --no-wait -o json)"
 
 RUN_ID="$(printf '%s' "$RUN_JSON" | jq -r '.runId')"
 if [[ -z "${RUN_ID:-}" || "$RUN_ID" == "null" ]]; then
@@ -45,14 +45,23 @@ if [[ -z "${RUN_ID:-}" || "$RUN_ID" == "null" ]]; then
 fi
 echo "Queued ACR task run: $RUN_ID"
 
-# ---- Fetch logs (always) ----
-LOG_TXT="$(az acr task logs -r "$ACR_NAME" --run-id "$RUN_ID")" || {
-  echo "ERROR: Failed to fetch logs for run $RUN_ID"
-  exit 1
-}
+# ---- Poll until completion ----
+echo "Waiting for run to complete..."
+status=""
+while ;; do
+    status="$(az acr task show-run -r "$ACR_NAME" --run-id "$RUN_ID" --query status -o tsv 2>/dev/null || echo '-')"
+    case "$status" in
+        Succeeded|Failed|Canceled) break ;;
+        Queued|Running|"") sleep 5 ;;
+        *) echo "Unknown status: $status (continuing)"; sleep 5 ;;
+    esac
+done
+
+# ---- Fetch logs (always) and save as artifact ----
+LOG_TXT="$(az acr task logs -r "$ACR_NAME" --run-id "$RUN_ID" 2>/dev/null || echo '')"
 printf '%s\n' "$LOG_TXT" > "acr-task-${RUN_ID}.log"
 
-# ---- Extract runtime JSON (block markers first, then single-line fallback) ----
+# ---- Try to extract runtime JSON (block markers first, then single-line fallback) ----
 BLOCK_JSON="$(printf '%s\n' "$LOG_TXT" \
   | awk '/PDS_RUNTIME_JSON_START/,/PDS_RUNTIME_JSON_END/' \
   | sed '1d;$d' || true)"
@@ -66,36 +75,27 @@ fi
 
 RUNTIME_JSON="${BLOCK_JSON:-$SINGLE_JSON}"
 
-if [[ -z "$RUNTIME_JSON" ]]; then
-  echo "ERROR: Could not locate runtime JSON in ACR logs for run $RUN_ID."
-  echo "Hint: ensure your smoke step prints either:"
-  echo "  PDS_RUNTIME_JSON_START"
-  echo "  { ...compact JSON... }"
-  echo "  PDS_RUNTIME_JSON_END"
-  echo "or a single line:"
-  echo "  PDS_RUNTIME_JSON: { ...compact JSON... }"
-  exit 1
-fi
+if [[ -n "$$RUNTIME_JSON" ]]; then
+     # Save compact runtime json
+     if command -v jq >/dev/null 2>&1; then
+        printf '%s\n' "$RUNTIME_JSON" | jq -c . > pds-runtime.json
+    else
+        printf '%s\n' "$RUNTIME_JSON" > pds-runtime.json
+    fi
 
-# ---- Save pds-runtime.json (compact) ----
-if command -v jq >/dev/null 2>&1; then
-  printf '%s\n' "$RUNTIME_JSON" | jq -c . > pds-runtime.json
+    # Compose manifest.json
+    cat > manifest.json <<EOF
+    {
+        "image": "${ACR_LOGIN_SERVER}/${IMAGE_REPOSITORY}:${IMAGE_TAG}",
+        "tag": "${IMAGE_TAG}",
+        "runId": "${RUN_ID}",
+        "runtime": $(cat pds-runtime.json)
+    }
+    EOF
+     echo "Wrote manifest.json and pds-runtime.json"
 else
-  printf '%s\n' "$RUNTIME_JSON" > pds-runtime.json
+    echo "No runtime JSON found in logs (expected if build failed before smoke)."
 fi
-
-# ---- Compose manifest.json ----
-cat > manifest.json <<EOF
-{
-  "image": "${ACR_LOGIN_SERVER}/${IMAGE_REPOSITORY}:${IMAGE_TAG}",
-  "tag": "${IMAGE_TAG}",
-  "runId": "${RUN_ID}",
-  "runtime": $(cat pds-runtime.json)
-}
-EOF
-
-echo "Manifest:"
-cat manifest.json
 
 # ---- Optional: create alias tags inside ACR ----
 # Example: ALIAS_TAGS="dotnet8-node22 dotnet8 latest"
@@ -106,6 +106,12 @@ if [[ -n "${ALIAS_TAGS// /}" ]]; then
       -s "${ACR_LOGIN_SERVER}/${IMAGE_REPOSITORY}:${IMAGE_TAG}" \
       -t "${IMAGE_REPOSITORY}:${alias}" --force
   done
+fi
+
+# ---- Exit with the run’s outcome ----
+if [[ "$status" != "Succeeded" ]]; then
+  echo "ACR task run failed; see acr-task-${RUN_ID}.log"
+  exit 1
 fi
 
 echo "Done. Artifacts: manifest.json, pds-runtime.json, acr-task-${RUN_ID}.log"
