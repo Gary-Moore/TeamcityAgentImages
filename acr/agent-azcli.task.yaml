@@ -1,0 +1,33 @@
+version: v1.1.0
+stepTimeout: 1200
+
+steps:
+# 1) Build the image from your Dockerfile
+- id: build
+  build: >-
+    -t $Registry/teamcity/agent:{{ .Values.image_tag }}
+    {{ if .Values.alias_tag1 }}-t $Registry/teamcity/agent:{{ .Values.alias_tag1 }}{{ end }}
+    {{ if .Values.alias_tag2 }}-t $Registry/teamcity/agent:{{ .Values.alias_tag2 }}{{ end }}
+    --build-arg BASE_IMAGE={{ .Values.base_image }}
+    --build-arg ENTRUST_INTERMEDIATE_URL={{ .Values.entrust_url }}
+    --build-arg ENTRUST_INTERMEDIATE_SHA256={{ .Values.entrust_sha256 }}
+    --build-arg VCS_REF={{ .Run.SourceControlCommit }}
+    --build-arg BUILD_DATE={{ .Run.Date }}
+    -f docker/linux/dotnet-agent/dotnetagent.dockerfile
+    .
+
+# 2) Run your smoke test in a container created from the just-built image
+- id: smoke
+  cmd: $Registry/teamcity/agent:{{ .Values.image_tag }} /usr/local/bin/test-image.sh
+  when: ["build"]
+
+- id: push
+  push:
+    - $Registry/teamcity/agent:{{ .Values.image_tag }}
+{{ if .Values.alias_tag1 }}
+    - $Registry/teamcity/agent:{{ .Values.alias_tag1 }}
+{{ end }}
+{{ if .Values.alias_tag2 }}
+    - $Registry/teamcity/agent:{{ .Values.alias_tag2 }}
+{{ end }}
+  when: ["smoke"]
