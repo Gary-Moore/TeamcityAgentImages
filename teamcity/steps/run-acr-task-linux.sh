@@ -1,55 +1,111 @@
 #!/usr/bin/env bash
+# Generic ACR Task runner:
+# - Logs into Azure with a Service Principal
+# - Triggers a named ACR Task with IMAGE_TAG + any extra --set/--set-secret args
+# - Fetches ACR logs by runId and extracts runtime JSON emitted by the smoke step
+# - Writes manifest.json and (optionally) creates alias tags inside ACR
 set -euo pipefail
 
 # ---- Required env ----
-: "${AZ_TENANT_ID:?Missing: set AZ_TENANT_ID for Azure login}"
-: "${AZ_CLIENT_ID:?Missing: set AZ_CLIENT_ID for Azure login}"
-: "${AZ_CLIENT_SECRET:?Missing: set AZ_CLIENT_SECRET for Azure login}"
-: "${AZ_SUBSCRIPTION_ID:?Missing: set AZ_SUBSCRIPTION_ID for Azure login}"
+: "${AZ_TENANT_ID:?Missing AZ_TENANT_ID}"
+: "${AZ_CLIENT_ID:?Missing AZ_CLIENT_ID}"
+: "${AZ_CLIENT_SECRET:?Missing AZ_CLIENT_SECRET}"
+: "${AZ_SUBSCRIPTION_ID:?Missing AZ_SUBSCRIPTION_ID}"
 
-: "${ACR_NAME:?Missing: set ACR_NAME for ACR task (e.g. myacr)}"
-: "${ACR_TASK_NAME:?Missing: set ACR_TASK_NAME for ACR task (e.g. mytask)}"
+: "${ACR_NAME:?Missing ACR_NAME (short name, e.g. gammawebdevops)}"
+: "${ACR_TASK_NAME:?Missing ACR_TASK_NAME (e.g. tc-agent-linux)}"
+: "${IMAGE_TAG:?Missing IMAGE_TAG (immutable, e.g. 2025.09-linux-dotnet8-node22)}"
 
-: "${IMAGE_TAG:?Missing: set IMAGE_TAG for ACR task (e.g. latest)}"
-: "${BASE_IMAGE:?Missing: set BASE_IMAGE for ACR task (e.g. mcr.microsoft.com/dotnet/sdk:8.0)}"
-: "${DOTNET_SDK_VERSION:?Missing: set DOTNET_SDK_VERSION for ACR task (e.g. 8.0)}"
-: "${NODE_MAJOR:?Missing: set NODE_MAJOR for ACR task (e.g. 18)}"
-: "${ENTRUST_URL:?Missing: set ENTRUST_URL for ACR task (e.g. https://entrust.example.com)}"
-: "${ENTRUST_SHA256:?Missing: set ENTRUST_SHA256 for ACR task (e.g. abc123...)}"
+# Defaults (override if needed)
+IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-teamcity/agent}"
+ACR_LOGIN_SERVER="${ACR_LOGIN_SERVER:-${ACR_NAME}.azurecr.io}"
+ALIAS_TAGS="${ALIAS_TAGS:-}"   # space-delimited e.g. "dotnet8-node22 dotnet8 latest"
 
-az login --service-principal -u "$AZ_CLIENT_ID" -p "$AZ_CLIENT_SECRET" --tenant "$AZ_TENANT_ID" >/dev/null
+# ---- Azure login ----
+az login --service-principal \
+  -u "$AZ_CLIENT_ID" \
+  -p "$AZ_CLIENT_SECRET" \
+  --tenant "$AZ_TENANT_ID" >/dev/null
 az account set --subscription "$AZ_SUBSCRIPTION_ID"
 
-# ---- Run task and capture Run ID ----
-echo "Running ACR Task '$ACR_TASK_NAME' on registry '$ACR_NAME' for tag '$IMAGE_TAG'"
+# ---- Trigger task (forward any extra --set/--set-secret flags) ----
+echo "Running ACR Task '$ACR_TASK_NAME' on registry '$ACR_NAME' for tag '$IMAGE_TAG'..."
 RUN_JSON="$(az acr task run \
-    -r "$ACR_NAME" \
-    -n "$ACR_TASK_NAME" \
-    --set image_tag="$IMAGE_TAG" \
-    --set dotnet_sdk_version="$DOTNET_SDK_VERSION" \
-    --set node_major="$NODE_MAJOR" \
-    --set base_image="$BASE_IMAGE" \
-    --set entrust_url="$ENTRUST_URL" \
-    --set-secret entrust_sha256="$ENTRUST_SHA256" \
-    --no-logs -o json)"
+  -r "$ACR_NAME" \
+  -n "$ACR_TASK_NAME" \
+  --set image_tag="$IMAGE_TAG" \
+  "$@" \
+  --no-logs -o json)"
 
 RUN_ID="$(printf '%s' "$RUN_JSON" | jq -r '.runId')"
-echo "Queued ACR task run with ID: $RUN_ID"
-az acr task logs -r "$ACR" --run-id "$RUN_ID" \
- | grep -oP 'PDS_RUNTIME_JSON:\s*\K\{.*\}' > pds-runtime.json
+if [[ -z "${RUN_ID:-}" || "$RUN_ID" == "null" ]]; then
+  echo "ERROR: Could not determine ACR runId. Raw response:"
+  echo "$RUN_JSON"
+  exit 1
+fi
+echo "Queued ACR task run: $RUN_ID"
 
+# ---- Fetch logs (always) ----
+LOG_TXT="$(az acr task logs -r "$ACR_NAME" --run-id "$RUN_ID")" || {
+  echo "ERROR: Failed to fetch logs for run $RUN_ID"
+  exit 1
+}
+printf '%s\n' "$LOG_TXT" > "acr-task-${RUN_ID}.log"
 
-# ---- Fetch logs and extract the delimited JSON ----
-LOG_TXT="$(az acr task logs -r "$ACR_NAME" --run-id "$RUN_ID")"
+# ---- Extract runtime JSON (block markers first, then single-line fallback) ----
+BLOCK_JSON="$(printf '%s\n' "$LOG_TXT" \
+  | awk '/PDS_RUNTIME_JSON_START/,/PDS_RUNTIME_JSON_END/' \
+  | sed '1d;$d' || true)"
 
-# ---- Persist raw logs ----
-printf '%s\n' "$LOG_TXT" > acr-task-$RUN_ID.log
-
-RUNTIME_JSON="$(printf '%s\n' "$LOG_TXT" | awk '/PDS_RUNTIME_JSON_START/,/PDS_RUNTIME_JSON_END/' | sed 'id;$d')"
-
-if [[ -z "$RUNTIME_JSON" ]]; then
-     echo "ERROR: Could not locate PDS_RUNTIME_JSON in ACR logs for run $RUN_ID"
-     exit 1
+if [[ -z "$BLOCK_JSON" ]]; then
+  SINGLE_JSON="$(printf '%s\n' "$LOG_TXT" \
+    | grep -oP 'PDS_RUNTIME_JSON:\s*\K\{.*\}' || true)"
+else
+  SINGLE_JSON=""
 fi
 
-printf '%s\n' "$RUNTIME_JSON" > pds-runtime.json
+RUNTIME_JSON="${BLOCK_JSON:-$SINGLE_JSON}"
+
+if [[ -z "$RUNTIME_JSON" ]]; then
+  echo "ERROR: Could not locate runtime JSON in ACR logs for run $RUN_ID."
+  echo "Hint: ensure your smoke step prints either:"
+  echo "  PDS_RUNTIME_JSON_START"
+  echo "  { ...compact JSON... }"
+  echo "  PDS_RUNTIME_JSON_END"
+  echo "or a single line:"
+  echo "  PDS_RUNTIME_JSON: { ...compact JSON... }"
+  exit 1
+fi
+
+# ---- Save pds-runtime.json (compact) ----
+if command -v jq >/dev/null 2>&1; then
+  printf '%s\n' "$RUNTIME_JSON" | jq -c . > pds-runtime.json
+else
+  printf '%s\n' "$RUNTIME_JSON" > pds-runtime.json
+fi
+
+# ---- Compose manifest.json ----
+cat > manifest.json <<EOF
+{
+  "image": "${ACR_LOGIN_SERVER}/${IMAGE_REPOSITORY}:${IMAGE_TAG}",
+  "tag": "${IMAGE_TAG}",
+  "runId": "${RUN_ID}",
+  "runtime": $(cat pds-runtime.json)
+}
+EOF
+
+echo "Manifest:"
+cat manifest.json
+
+# ---- Optional: create alias tags inside ACR ----
+# Example: ALIAS_TAGS="dotnet8-node22 dotnet8 latest"
+if [[ -n "${ALIAS_TAGS// /}" ]]; then
+  for alias in $ALIAS_TAGS; do
+    echo "Creating alias tag '${alias}' for ${IMAGE_REPOSITORY}:${IMAGE_TAG} in registry..."
+    az acr import -n "$ACR_NAME" \
+      -s "${ACR_LOGIN_SERVER}/${IMAGE_REPOSITORY}:${IMAGE_TAG}" \
+      -t "${IMAGE_REPOSITORY}:${alias}" --force
+  done
+fi
+
+echo "Done. Artifacts: manifest.json, pds-runtime.json, acr-task-${RUN_ID}.log"

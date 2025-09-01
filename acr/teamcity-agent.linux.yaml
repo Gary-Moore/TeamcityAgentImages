@@ -1,9 +1,15 @@
 version: v1.1.0
 stepTimeout: 1200
 steps: 
- # 1) Build the image (tags the primary immutable tag)
+ # 1) Build the image (primary tag + optional tags)
   - build: >-
-     -t $Registry/teamcity/agent:{{.Values.image_tag}}
+     -t $Registry/teamcity/agent:{{ .Values.image_tag}}
+     {{- if .Values.alias_tag1 }}
+     -t $Registry/teamcity/agent:{{ .Values.alias_tag1 }}
+     {{- end }}
+     {{- if .Values.alias_tag2 }}
+     -t $Registry/teamcity/agent:{{ .Values.alias_tag2 }}
+     {{- end }}
      --build-arg BASE_IMAGE={{.Values.base_image}}
      --build-arg dotnetSdkVersion={{.Values.dotnet_sdk_version}}
      --build-arg nodeVersion={{.Values.node_major}}
@@ -20,32 +26,14 @@ steps:
     id: smoke
     when: ["build"]
 
- # 3) Push the primary immutable tag
-  - push:
-      - $Registry/teamcity/agent:{{.Values.image_tag}}
-    id: push-primary
-    when: ["smoke"]
-# 4 ) 
+ # 3) Push the primary and optional tags
   - cmd: >-
-      /bin/sh -lc '
-      set -e
-      IMAGE_BASE=$Registry/teamcity/agent:{{.Values.image_tag}}
-
-      if [ -n "{{.Values.alias_tag1}}" ]; then
-        echo "Pushing alias tag: {{.Values.alias_tag1}}"
-        docker tag "$IMAGE_BASE" "$Registry/teamcity/agent:{{.Values.alias_tag1}}"
-        docker push "$Registry/teamcity/agent:{{.Values.alias_tag1}}"
-      else
-        echo "alias_tag1 is not set; skipping."
-      fi
-
-      if [ -n "{{.Values.alias_tag2}}" ]; then
-        echo "Pushing alias tag: {{.Values.alias_tag2}}"
-        docker tag "$IMAGE_BASE" "$Registry/teamcity/agent:{{.Values.alias_tag2}}"
-        docker push "$Registry/teamcity/agent:{{.Values.alias_tag2}}"
-      else
-        echo "alias_tag2 is not set; skipping."
-      fi
-      '
-    id: alias-push
-    when: ["push-primary"]
+      - $Registry/teamcity/agent:{{ .Values.image_tag }}
+      {{- if .Values.alias_tag1 }}
+      - $Registry/teamcity/agent:{{ .Values.alias_tag1 }}
+      {{- end }}
+      {{- if .Values.alias_tag2}}
+      - $Registry/teamcity/agent:{{ .Values.alias_tag2}}
+      {{- end }}
+    id: push
+    when: ["smoke"]
