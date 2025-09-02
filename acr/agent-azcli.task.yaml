@@ -3,7 +3,7 @@ stepTimeout: 1200
 
 steps:
 - id: build
-  build: "--platform linux/amd64 -t $Registry/teamcity/agent:{{ .Values.image_tag }}{{ if .Values.alias_tag1 }} -t $Registry/teamcity/agent:{{ .Values.alias_tag1 }}{{ end }}{{ if .Values.alias_tag2 }} -t $Registry/teamcity/agent:{{ .Values.alias_tag2 }}{{ end }} --build-arg BASE_IMAGE={{ .Values.base_image }} --build-arg ENTRUST_INTERMEDIATE_URL={{ .Values.entrust_url }} --build-arg ENTRUST_INTERMEDIATE_SHA256={{ .Values.entrust_sha256 }} --build-arg VCS_REF={{ .Run.SourceControlCommit }} --build-arg BUILD_DATE={{ .Run.Date }} -f docker/linux/az-agent/Dockerfile ."
+  build: "--platform linux/amd64 -t $Registry/teamcity/agent:{{ .Values.image_tag }}{{ if .Values.alias_tag1 }} -t $Registry/teamcity/agent:{{ .Values.alias_tag1 }}{{ end }}{{ if .Values.alias_tag2 }} -t $Registry/teamcity/agent:{{ .Values.alias_tag2 }}{{ end }} --build-arg BASE_IMAGE={{ .Values.base_image }} --build-arg ENTRUST_INTERMEDIATE_URL={{ .Values.entrust_url }} --build-arg ENTRUST_INTERMEDIATE_SHA256={{ .Values.entrust_sha256 }} --build-arg VCS_REF={{ .Run.SourceControlCommit }} --build-arg BUILD_DATE={{ .Run.Date }} -f docker/linux/az-agent/azagent.dockerfile ."
 
 - id: smoke
   cmd: "--entrypoint /usr/local/bin/test-image.sh $Registry/teamcity/agent:{{ .Values.image_tag }}"
