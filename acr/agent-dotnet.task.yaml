@@ -5,6 +5,7 @@ steps:
   # 1) Build the image from your Dockerfile
   - id: build
     build: >-
+      --platform linux/amd64
       -t $Registry/teamcity/agent:{{ .Values.image_tag }}
       {{ if .Values.alias_tag1 }}-t $Registry/teamcity/agent:{{ .Values.alias_tag1 }}{{ end }}
       {{ if .Values.alias_tag2 }}-t $Registry/teamcity/agent:{{ .Values.alias_tag2 }}{{ end }}
@@ -20,7 +21,9 @@ steps:
 
   # 2) Run your smoke test in a container created from the just-built image
   - id: smoke
-    cmd: $Registry/teamcity/agent:{{ .Values.image_tag }} /usr/local/bin/test-image.sh
+    cmd: >-
+     --entrypoint /usr/local/bin/test-image.sh
+     $Registry/teamcity/agent:{{ .Values.image_tag }}
     when: ["build"]
 
   # 3) Push primary + optional aliases
