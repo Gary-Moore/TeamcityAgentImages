@@ -2,18 +2,13 @@ version: v1.1.0
 stepTimeout: 1200
 
 steps:
-  # 1) Build the image from your Dockerfile
   - id: build
     build: "--platform linux/amd64 -t $Registry/teamcity/agent:{{ .Values.image_tag }}{{ if .Values.alias_tag1 }} -t $Registry/teamcity/agent:{{ .Values.alias_tag1 }}{{ end }}{{ if .Values.alias_tag2 }} -t $Registry/teamcity/agent:{{ .Values.alias_tag2 }}{{ end }} --build-arg BASE_IMAGE={{ .Values.base_image }} --build-arg dotnetSdkVersion={{ .Values.dotnet_sdk_version }} --build-arg nodeVersion={{ .Values.node_major }} --build-arg ENTRUST_INTERMEDIATE_URL={{ .Values.entrust_url }} --build-arg ENTRUST_INTERMEDIATE_SHA256={{ .Values.entrust_sha256 }} --build-arg VCS_REF={{ .Run.SourceControlCommit }} --build-arg BUILD_DATE={{ .Run.Date }} -f docker/linux/dotnet-agent/Dockerfile ."
-     
-  # 2) Run your smoke test in a container created from the just-built image
+
   - id: smoke
-    cmd: >-
-     --entrypoint /usr/local/bin/test-image.sh
-     $Registry/teamcity/agent:{{ .Values.image_tag }}
+    cmd: "--entrypoint /usr/local/bin/test-image.sh $Registry/teamcity/agent:{{ .Values.image_tag }}"
     when: ["build"]
 
-  # 3) Push primary + optional aliases
   - id: push
     push:
       - $Registry/teamcity/agent:{{ .Values.image_tag }}

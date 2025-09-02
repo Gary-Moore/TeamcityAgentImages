@@ -35,19 +35,20 @@ trap cleanup EXIT
 
 # ---- Trigger task (queue only) ----
 echo "Running ACR Task '$ACR_TASK_NAME' on '$ACR_NAME' for tag '$IMAGE_TAG'..."
-RUN_ID="$(az acr task run -r "$ACR_NAME" -n "$ACR_TASK_NAME" \
+RUN_OUT="$(az acr task run -r "$ACR_NAME" -n "$ACR_TASK_NAME" \
   --set image_tag="$IMAGE_TAG" "$@" \
-  --no-logs --no-wait --query runId -o tsv 2>/dev/null || true)"
+  --no-logs --no-wait --query runId -o tsv 2>&1 || true)"
 
-# Fallback: parse the standard warning line if CLI wrote to stderr
+# Prefer TSV (runId only); else parse the warning line
+RUN_ID="$(printf '%s' "$RUN_OUT" | head -n1 | grep -Eo '^[a-z0-9-]+$' || true)"
 if [[ -z "$RUN_ID" ]]; then
-  RUN_ID="$(az acr task run -r "$ACR_NAME" -n "$ACR_TASK_NAME" \
-    --set image_tag="$IMAGE_TAG" "$@" \
-    --no-logs --no-wait 2>&1 | sed -n 's/.*Queued a run with ID: \([a-z0-9]\+\).*/\1/p' | tail -n1)"
+  RUN_ID="$(printf '%s' "$RUN_OUT" | sed -n 's/.*Queued a run with ID: \([a-z0-9-]\+\).*/\1/p' | tail -n1)"
 fi
 
 if [[ -z "$RUN_ID" ]]; then
   echo "ERROR: Could not determine ACR runId."
+  echo "Raw output:"
+  echo "$RUN_OUT"
   exit 1
 fi
 
