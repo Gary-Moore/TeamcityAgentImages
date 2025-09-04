@@ -19,7 +19,6 @@ RUN_ID=""
 
 # (Nice-to-have: quieter az output)
 export AZURE_CORE_COLLECT_TELEMETRY=0
-az config set core.only_show_errors=true >/dev/null || true
 
 # ---- Azure login ----
 az login --service-principal -u "$AZ_CLIENT_ID" -p "$AZ_CLIENT_SECRET" --tenant "$AZ_TENANT_ID" >/dev/null
@@ -36,20 +35,27 @@ trap cleanup EXIT
 # ---- Trigger task (queue only) ----
 echo "Running ACR Task '$ACR_TASK_NAME' on '$ACR_NAME' for tag '$IMAGE_TAG'..."
 
-# One call only, capture stdout+stderr
-RUN_OUT="$(az acr task run -r "$ACR_NAME" -n "$ACR_TASK_NAME" \
-  --set image_tag="$IMAGE_TAG" "$@" \
-  --no-logs --no-wait 2>&1 || true)"
+# Timestamp to filter very recent runs (ISO sorts lexically)
+START_ISO="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
+# One call only; DO NOT suppress warnings here — they carry the runId
+RUN_OUT="$(
+  AZURE_CORE_ONLY_SHOW_ERRORS= \
+  az acr task run -r "$ACR_NAME" -n "$ACR_TASK_NAME" \
+    --set image_tag="$IMAGE_TAG" "$@" \
+    --no-logs --no-wait 2>&1 || true
+)"
 
 # Parse: "Queued a run with ID: <id>"
-RUN_ID="$(printf '%s' "$RUN_OUT" \
-  | sed -n 's/.*Queued a run with ID: \([a-z0-9-]\+\).*/\1/p' \
-  | tail -n1)"
+RUN_ID="$(printf '%s' "$RUN_OUT" | sed -n 's/.*Queued a run with ID: \([a-z0-9-]\+\).*/\1/p' | tail -n1)"
 
-# Fallback: ask ACR for the most recent run for this task in the last few minutes
+# Fallback: ask ACR for the most recent run for this task after START_ISO
 if [[ -z "$RUN_ID" ]]; then
+  # tiny wait to let control plane persist the run
+  sleep 2
   RUN_ID="$(az acr task list-runs -r "$ACR_NAME" --top 10 --orderby time_desc \
-    --query "[?task.name=='$ACR_TASK_NAME'] | [0].runId" -o tsv 2>/dev/null || true)"
+    --query "[?task.name=='$ACR_TASK_NAME' && createTime>\`'$START_ISO'\`] | [0].runId" \
+    -o tsv 2>/dev/null || true)"
 fi
 
 if [[ -z "$RUN_ID" ]]; then
@@ -61,6 +67,7 @@ fi
 
 echo "Queued ACR task run: $RUN_ID"
 echo "##teamcity[setParameter name='env.ACR_RUN_ID' value='${RUN_ID}']"
+
 
 # ---- Poll until completion (with timeout) ----
 status=""
