@@ -21,10 +21,12 @@ RUN_ID=""
 az login --service-principal -u "$AZ_CLIENT_ID" -p "$AZ_CLIENT_SECRET" --tenant "$AZ_TENANT_ID" >/dev/null
 az account set --subscription "$AZ_SUBSCRIPTION_ID"
 
-# Always fetch logs if we have a RUN_ID and exit unexpectedly
+# Always fetch logs if we have a RUN_ID; otherwise show last run for the task
 cleanup() {
   if [[ -n "${RUN_ID:-}" ]]; then
-    az acr task logs -r "$ACR_NAME" --run-id "$RUN_ID" 2>/dev/null || true
+    az acr task logs -r "$ACR_NAME" --run-id "$RUN_ID" --only-show-errors 2>/dev/null || true
+  else
+    az acr task logs -r "$ACR_NAME" -n "$ACR_TASK_NAME" --only-show-errors 2>/dev/null || true
   fi
 }
 trap cleanup EXIT
@@ -33,25 +35,41 @@ echo "Running ACR Task '$ACR_TASK_NAME' on '$ACR_NAME' for tag '$IMAGE_TAG'..."
 
 START_ISO="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
-RUN_OUT="$(az acr task run -r "$ACR_NAME" -n "$ACR_TASK_NAME" \
-  --set image_tag="$IMAGE_TAG" "$@" \
-  --no-logs --no-wait 2>&1 || true)"
-
-# Parse: "Queued a run with ID: <id>"
-RUN_ID="$(printf '%s' "$RUN_OUT" | sed -n 's/.*Queued a run with ID: \([a-z0-9-]\+\).*/\1/p' | tail -n1)"
-
-# Fallback: ask for the most recent run for this task after we queued
-if [[ -z "$RUN_ID" ]]; then
-  sleep 2
-  RUN_ID="$(az acr task list-runs -r "$ACR_NAME" --top 10 --orderby time_desc \
-    --query "[?task.name=='$ACR_TASK_NAME' && createTime>\`'$START_ISO'\`] | [0].runId" -o tsv 2>/dev/null || true)"
+# Queue the task; do not rely on stdout text (it can be empty with --no-wait/--no-logs)
+if ! az acr task run -r "$ACR_NAME" -n "$ACR_TASK_NAME" \
+     --set image_tag="$IMAGE_TAG" "$@" \
+     --no-logs --no-wait --only-show-errors >/dev/null 2>&1; then
+  echo "WARN: 'az acr task run' returned non-zero; attempting to discover a run anyway…"
 fi
 
+# Robust discovery of the new run:
+# Poll briefly for a fresh run whose createTime >= START_ISO and belongs to our task.
+DISCOVERY_TIMEOUT_SECS="${DISCOVERY_TIMEOUT_SECS:-20}"
+DISCOVERY_INTERVAL_SECS="${DISCOVERY_INTERVAL_SECS:-1}"
+deadline=$(( $(date +%s) + DISCOVERY_TIMEOUT_SECS ))
+
+while [[ -z "$RUN_ID" && $(date +%s) -lt $deadline ]]; do
+  # Get the newest run for this task
+  CANDIDATE_ID="$(az acr task list-runs -r "$ACR_NAME" -n "$ACR_TASK_NAME" --top 20 \
+      --query "sort_by(@, &createTime)[-1].runId" -o tsv 2>/dev/null || true)"
+
+  if [[ -n "$CANDIDATE_ID" ]]; then
+    CANDIDATE_CREATED="$(az acr task show-run -r "$ACR_NAME" --run-id "$CANDIDATE_ID" \
+        --query createTime -o tsv 2>/dev/null || echo "")"
+
+    # ISO8601 UTC strings compare lexicographically
+    if [[ -n "$CANDIDATE_CREATED" && "$CANDIDATE_CREATED" > "$START_ISO" || "$CANDIDATE_CREATED" == "$START_ISO" ]]; then
+      RUN_ID="$CANDIDATE_ID"
+      break
+    fi
+  fi
+
+  sleep "$DISCOVERY_INTERVAL_SECS"
+done
+
 if [[ -z "$RUN_ID" ]]; then
-  echo "ERROR: Could not determine ACR runId. Raw output from 'az acr task run' follows:"
-  echo "----- RUN_OUT -----"
-  printf '%s\n' "$RUN_OUT"
-  echo "-------------------"
+  echo "ERROR: Could not determine ACR runId."
+  echo "Tip: Check SP/RBAC permissions for ACR Tasks and try running locally with '--debug'."
   exit 1
 fi
 
@@ -105,7 +123,9 @@ fi
 # ---- Resolve built image digest (if succeeded) ----
 DIGEST=""
 if [[ "$status" == "Succeeded" ]]; then
-  DIGEST="$(az acr repository show -n "$ACR_NAME" --image "${IMAGE_REPOSITORY}:${IMAGE_TAG}" --query digest -o tsv 2>/dev/null || echo '')"
+  # Use manifest API to resolve digest for repo:tag
+  DIGEST="$(az acr manifest show -r "$ACR_NAME" -n "${IMAGE_REPOSITORY}:${IMAGE_TAG}" \
+            --query digest -o tsv 2>/dev/null || echo '')"
   if [[ -n "$DIGEST" ]]; then
     echo "Resolved digest for ${IMAGE_REPOSITORY}:${IMAGE_TAG} -> ${DIGEST}"
     echo "##teamcity[setParameter name='env.IMAGE_DIGEST' value='${DIGEST}']"
