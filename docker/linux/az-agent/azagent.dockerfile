@@ -33,31 +33,33 @@ ENV JAVA_HOME=/opt/java/openjdk
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
 ENV AZURE_CORE_COLLECT_TELEMETRY=0
 
-# ---- Import Entrust intermediate into JRE cacerts (idempotent) ----
+# ---- Import Entrust intermediate into JRE cacerts (HTTP-only, hash-pinned) ----
 RUN set -euxo pipefail \
   && : "${ENTRUST_INTERMEDIATE_URL:?missing}" \
   && : "${ENTRUST_INTERMEDIATE_SHA256:?missing}" \
-  # Prefer HTTPS for transport (you still hash-pin it)
-  && case "${ENTRUST_INTERMEDIATE_URL}" in http://*) \
-       echo "WARN: ENTRUST_INTERMEDIATE_URL is http:// — switching to https:// if possible"; \
-       ENTRUST_INTERMEDIATE_URL="${ENTRUST_INTERMEDIATE_URL/http:\/\//https:\/\/}"; \
-     esac \
-  && curl -fsSL "${ENTRUST_INTERMEDIATE_URL}" -o /tmp/entrust-ov.crt \
-  && echo "${ENTRUST_INTERMEDIATE_SHA256}  /tmp/entrust-ov.crt" | sha256sum -c - \
-  && openssl x509 -in /tmp/entrust-ov.crt -inform DER -out /tmp/entrust-ov.pem -outform PEM || cp /tmp/entrust-ov.crt /tmp/entrust-ov.pem \
-  && ACTUAL_FP="$(openssl x509 -in /tmp/entrust-ov.pem -noout -fingerprint -sha256 | cut -d= -f2 | tr -d ':')" \
+  && KEYTOOL="${JAVA_HOME}/bin/keytool" \
+  && STOREPASS=changeit \
+  && TMP_CRT=/tmp/entrust-ov.crt \
+  && TMP_PEM=/tmp/entrust-ov.pem \
+  # Strictly use the URL as provided (HTTP allowed)
+  && curl -fsSL --retry 3 --retry-connrefused "${ENTRUST_INTERMEDIATE_URL}" -o "${TMP_CRT}" \  
+  # Hash pin the download
+  && echo "${ENTRUST_INTERMEDIATE_SHA256}  ${TMP_CRT}" | sha256sum -c - \
+  # Convert to PEM if input was DER; otherwise reuse as-is
+  && if openssl x509 -in "${TMP_CRT}" -inform DER -out "${TMP_PEM}" -outform PEM 2>/dev/null; then :; else cp "${TMP_CRT}" "${TMP_PEM}"; fi \  
+  # Verify fingerprint again on the PEM we’ll import
+  && ACTUAL_FP="$(openssl x509 -in "${TMP_PEM}" -noout -fingerprint -sha256 | cut -d= -f2 | tr -d ':')" \
   && echo "Expected FP: ${ENTRUST_INTERMEDIATE_SHA256}" \
   && echo "Actual FP:   ${ACTUAL_FP}" \
   && [ "${ACTUAL_FP}" = "${ENTRUST_INTERMEDIATE_SHA256}" ] \
-  # Idempotent import: delete alias if it already exists, then import
-  && KEYTOOL="${JAVA_HOME}/bin/keytool" \
-  && STOREPASS=changeit \
+  # Idempotent import
   && "${KEYTOOL}" -cacerts -storepass "${STOREPASS}" -delete -alias "${ENTRUST_ALIAS}" >/dev/null 2>&1 || true \
   && "${KEYTOOL}" -importcert -trustcacerts -noprompt \
        -alias "${ENTRUST_ALIAS}" \
-       -file /tmp/entrust-ov.pem \
+       -file "${TMP_PEM}" \
        -cacerts -storepass "${STOREPASS}" \
-  && rm -f /tmp/entrust-ov.* /tmp/sectigo-r46.* \
+  # Clean
+  && rm -f "${TMP_CRT}" "${TMP_PEM}" \
   && rm -rf /var/lib/apt/lists/*
 
 # ---- Azure CLI ----
