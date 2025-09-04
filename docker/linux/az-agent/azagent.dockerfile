@@ -11,8 +11,9 @@ ARG VCS_REF
 ARG BUILD_DATE
 
 # CA download + pinning (pass via --build-arg)
-ARG ENTRUST_INTERMEDIATE_URL       # e.g. https://.../Entrust_OV_TLS_Issuing_RSA_CA_2.crt
-ARG ENTRUST_INTERMEDIATE_SHA256    # 64-hex chars
+ARG ENTRUST_INTERMEDIATE_URL        # e.g. https://.../Entrust_OV_TLS_Issuing_RSA_CA_2.crt
+ARG ENTRUST_INTERMEDIATE_SHA256     # 64-hex chars
+ARG ENTRUST_ALIAS="entrust-ov-tls-issuing-rsa-ca-2"
 
 USER root
 WORKDIR /opt/buildagent/work
@@ -27,25 +28,35 @@ RUN set -euxo pipefail \
   && update-ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 
+  # Make sure the agent uses the patched JRE (define early so we can reuse it below)
+ENV JAVA_HOME=/opt/java/openjdk
+ENV PATH="${JAVA_HOME}/bin:${PATH}"
+ENV AZURE_CORE_COLLECT_TELEMETRY=0
+
+# ---- Import Entrust intermediate into JRE cacerts (idempotent) ----
 RUN set -euxo pipefail \
-  # Fetch Entrust OV intermediate + pin
-  && test -n "${ENTRUST_INTERMEDIATE_URL}" \
-  && test -n "${ENTRUST_INTERMEDIATE_SHA256}" \
+  && : "${ENTRUST_INTERMEDIATE_URL:?missing}" \
+  && : "${ENTRUST_INTERMEDIATE_SHA256:?missing}" \
+  # Prefer HTTPS for transport (you still hash-pin it)
+  && case "${ENTRUST_INTERMEDIATE_URL}" in http://*) \
+       echo "WARN: ENTRUST_INTERMEDIATE_URL is http:// — switching to https:// if possible"; \
+       ENTRUST_INTERMEDIATE_URL="${ENTRUST_INTERMEDIATE_URL/http:\/\//https:\/\/}"; \
+     esac \
   && curl -fsSL "${ENTRUST_INTERMEDIATE_URL}" -o /tmp/entrust-ov.crt \
   && echo "${ENTRUST_INTERMEDIATE_SHA256}  /tmp/entrust-ov.crt" | sha256sum -c - \
   && openssl x509 -in /tmp/entrust-ov.crt -inform DER -out /tmp/entrust-ov.pem -outform PEM || cp /tmp/entrust-ov.crt /tmp/entrust-ov.pem \
-  && ACTUAL_FP=$(openssl x509 -in /tmp/entrust-ov.pem -noout -fingerprint -sha256 | cut -d= -f2 | tr -d ':') \
+  && ACTUAL_FP="$(openssl x509 -in /tmp/entrust-ov.pem -noout -fingerprint -sha256 | cut -d= -f2 | tr -d ':')" \
   && echo "Expected FP: ${ENTRUST_INTERMEDIATE_SHA256}" \
-  && echo "Actual FP: ${ACTUAL_FP}" \
+  && echo "Actual FP:   ${ACTUAL_FP}" \
   && [ "${ACTUAL_FP}" = "${ENTRUST_INTERMEDIATE_SHA256}" ] \
-  \
-  # Import into Corretto (used by the agent)
-  && KEYTOOL=/opt/java/openjdk/bin/keytool \
+  # Idempotent import: delete alias if it already exists, then import
+  && KEYTOOL="${JAVA_HOME}/bin/keytool" \
   && STOREPASS=changeit \
-  && "$KEYTOOL" -importcert -trustcacerts -noprompt \
-       -alias entrust-ov-tls-issuing-rsa-ca-2 \
+  && "${KEYTOOL}" -cacerts -storepass "${STOREPASS}" -delete -alias "${ENTRUST_ALIAS}" >/dev/null 2>&1 || true \
+  && "${KEYTOOL}" -importcert -trustcacerts -noprompt \
+       -alias "${ENTRUST_ALIAS}" \
        -file /tmp/entrust-ov.pem \
-       -cacerts -storepass "$STOREPASS" \
+       -cacerts -storepass "${STOREPASS}" \
   && rm -f /tmp/entrust-ov.* /tmp/sectigo-r46.* \
   && rm -rf /var/lib/apt/lists/*
 
@@ -66,23 +77,15 @@ RUN set -euxo pipefail \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-# Make sure the agent uses the patched JRE
-ENV JAVA_HOME=/opt/java/openjdk
-ENV PATH="${JAVA_HOME}/bin:${PATH}"
-ENV AZURE_CORE_COLLECT_TELEMETRY=0
-
 LABEL org.opencontainers.image.title="GammaWeb TeamCity Linux Dotnet Agent" \
       org.opencontainers.image.source="https://github.com/Gary-Moore/TeamcityAgentImages" \
       org.opencontainers.image.created="${BUILD_DATE}" \
       org.opencontainers.image.revision="${VCS_REF}"
 
 # Copy smoke test into the image and make it executable
+ENV ENTRUST_ALIAS="${ENTRUST_ALIAS}"
 COPY docker/linux/az-agent/test-image.sh /usr/local/bin/test-image.sh
 RUN chmod +x /usr/local/bin/test-image.sh
-
-COPY docker/common/entrypoint-wrapper.sh /usr/local/bin/entrypoint-wrapper.sh
-RUN chmod +x /usr/local/bin/entrypoint-wrapper.sh
-ENTRYPOINT ["/usr/local/bin/entrypoint-wrapper.sh"]
 
 USER buildagent
 WORKDIR /home/buildagent

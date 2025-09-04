@@ -6,8 +6,17 @@ steps:
   build: "--platform linux/amd64 -t $Registry/teamcity/agent:{{ .Values.image_tag }}{{ if .Values.alias_tag1 }} -t $Registry/teamcity/agent:{{ .Values.alias_tag1 }}{{ end }}{{ if .Values.alias_tag2 }} -t $Registry/teamcity/agent:{{ .Values.alias_tag2 }}{{ end }} --build-arg BASE_IMAGE={{ .Values.base_image }} --build-arg ENTRUST_INTERMEDIATE_URL={{ .Values.entrust_url }} --build-arg ENTRUST_INTERMEDIATE_SHA256={{ .Values.entrust_sha256 }} --build-arg VCS_REF={{ .Run.SourceControlCommit }} --build-arg BUILD_DATE={{ .Run.Date }} -f docker/linux/az-agent/azagent.dockerfile ."
 
 - id: smoke
-  cmd: $Registry/teamcity/agent:{{ .Values.image_tag }} /usr/local/bin/test-image.sh
-  when: ["build"]
+  image: $Registry/teamcity/agent:{{ .Values.image_tag }}
+  entryPoint: /bin/bash -lc
+  # user: root   # ← uncomment only if your test needs root
+  timeout: 1200
+  cmd: |
+    set -euo pipefail
+    echo "=== Smoke start: $(date -u +%FT%TZ) ==="
+    /usr/local/bin/test-image.sh
+    echo "=== Smoke OK ==="
+    # Optional: emit a compact JSON line for outer log scrapers
+    echo 'PDS_RUNTIME_JSON: {"smoke":"ok","tag":"{{ .Values.image_tag }}","ts":"{{ .Run.Date }}"}'
 
 - id: push
   push:
