@@ -123,9 +123,15 @@ fi
 # ---- Resolve built image digest (if succeeded) ----
 DIGEST=""
 if [[ "$status" == "Succeeded" ]]; then
-  # Use manifest API to resolve digest for repo:tag
-  DIGEST="$(az acr manifest show -r "$ACR_NAME" -n "${IMAGE_REPOSITORY}:${IMAGE_TAG}" \
-            --query digest -o tsv 2>/dev/null || echo '')"
+  # up to 6 attempts over ~18s to ride out ACR metadata propagation
+  for i in {1..6}; do
+    DIGEST="$(az acr manifest show-metadata -r "$ACR_NAME" \
+      -n "${IMAGE_REPOSITORY}:${IMAGE_TAG}" \
+      --query digest -o tsv 2>/dev/null || true)"
+    [[ -n "$DIGEST" ]] && break
+    sleep 3
+  done
+
   if [[ -n "$DIGEST" ]]; then
     echo "Resolved digest for ${IMAGE_REPOSITORY}:${IMAGE_TAG} -> ${DIGEST}"
     echo "##teamcity[setParameter name='env.IMAGE_DIGEST' value='${DIGEST}']"
@@ -133,6 +139,7 @@ if [[ "$status" == "Succeeded" ]]; then
     echo "WARNING: Could not resolve digest for ${IMAGE_REPOSITORY}:${IMAGE_TAG}"
   fi
 fi
+
 
 # ---- Write manifest.json (if we have digest or runtime) ----
 if [[ -n "${DIGEST}${RUNTIME_JSON}" ]]; then
