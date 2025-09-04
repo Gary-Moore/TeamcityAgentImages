@@ -17,9 +17,6 @@ POLL_SLEEP="${POLL_SLEEP:-5}"
 MAX_WAIT_SECS="${MAX_WAIT_SECS:-1200}"
 RUN_ID=""
 
-# (Nice-to-have: quieter az output)
-export AZURE_CORE_COLLECT_TELEMETRY=0
-
 # ---- Azure login ----
 az login --service-principal -u "$AZ_CLIENT_ID" -p "$AZ_CLIENT_SECRET" --tenant "$AZ_TENANT_ID" >/dev/null
 az account set --subscription "$AZ_SUBSCRIPTION_ID"

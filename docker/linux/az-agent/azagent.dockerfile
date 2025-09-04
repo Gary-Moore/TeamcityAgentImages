@@ -80,5 +80,9 @@ LABEL org.opencontainers.image.title="GammaWeb TeamCity Linux Dotnet Agent" \
 COPY docker/linux/az-agent/test-image.sh /usr/local/bin/test-image.sh
 RUN chmod +x /usr/local/bin/test-image.sh
 
+COPY docker/common/entrypoint-wrapper.sh /usr/local/bin/entrypoint-wrapper.sh
+RUN chmod +x /usr/local/bin/entrypoint-wrapper.sh
+ENTRYPOINT ["/usr/local/bin/entrypoint-wrapper.sh"]
+
 USER buildagent
 WORKDIR /home/buildagent
