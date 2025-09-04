@@ -32,42 +32,34 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# ---- Trigger task (queue only) ----
 echo "Running ACR Task '$ACR_TASK_NAME' on '$ACR_NAME' for tag '$IMAGE_TAG'..."
 
-# Timestamp to filter very recent runs (ISO sorts lexically)
 START_ISO="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
-# One call only; DO NOT suppress warnings here — they carry the runId
-RUN_OUT="$(
-  AZURE_CORE_ONLY_SHOW_ERRORS= \
-  az acr task run -r "$ACR_NAME" -n "$ACR_TASK_NAME" \
-    --set image_tag="$IMAGE_TAG" "$@" \
-    --no-logs --no-wait 2>&1 || true
-)"
+RUN_OUT="$(az acr task run -r "$ACR_NAME" -n "$ACR_TASK_NAME" \
+  --set image_tag="$IMAGE_TAG" "$@" \
+  --no-logs --no-wait 2>&1 || true)"
 
 # Parse: "Queued a run with ID: <id>"
 RUN_ID="$(printf '%s' "$RUN_OUT" | sed -n 's/.*Queued a run with ID: \([a-z0-9-]\+\).*/\1/p' | tail -n1)"
 
-# Fallback: ask ACR for the most recent run for this task after START_ISO
+# Fallback: ask for the most recent run for this task after we queued
 if [[ -z "$RUN_ID" ]]; then
-  # tiny wait to let control plane persist the run
   sleep 2
   RUN_ID="$(az acr task list-runs -r "$ACR_NAME" --top 10 --orderby time_desc \
-    --query "[?task.name=='$ACR_TASK_NAME' && createTime>\`'$START_ISO'\`] | [0].runId" \
-    -o tsv 2>/dev/null || true)"
+    --query "[?task.name=='$ACR_TASK_NAME' && createTime>\`'$START_ISO'\`] | [0].runId" -o tsv 2>/dev/null || true)"
 fi
 
 if [[ -z "$RUN_ID" ]]; then
-  echo "ERROR: Could not determine ACR runId."
-  echo "Raw output from 'az acr task run':"
-  echo "$RUN_OUT"
+  echo "ERROR: Could not determine ACR runId. Raw output from 'az acr task run' follows:"
+  echo "----- RUN_OUT -----"
+  printf '%s\n' "$RUN_OUT"
+  echo "-------------------"
   exit 1
 fi
 
 echo "Queued ACR task run: $RUN_ID"
 echo "##teamcity[setParameter name='env.ACR_RUN_ID' value='${RUN_ID}']"
-
 
 # ---- Poll until completion (with timeout) ----
 status=""
