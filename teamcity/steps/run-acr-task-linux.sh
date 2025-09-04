@@ -36,25 +36,20 @@ trap cleanup EXIT
 # ---- Trigger task (queue only) ----
 echo "Running ACR Task '$ACR_TASK_NAME' on '$ACR_NAME' for tag '$IMAGE_TAG'..."
 
-# Run ONCE, capture stdout+stderr
+# One call only, capture stdout+stderr
 RUN_OUT="$(az acr task run -r "$ACR_NAME" -n "$ACR_TASK_NAME" \
   --set image_tag="$IMAGE_TAG" "$@" \
-  --no-logs --no-wait --query runId -o tsv 2>&1 || true)"
+  --no-logs --no-wait 2>&1 || true)"
 
-# Prefer TSV runId on the first line
-RUN_ID="$(printf '%s' "$RUN_OUT" | head -n1 | grep -Eo '^[a-z0-9-]+$' || true)"
+# Parse: "Queued a run with ID: <id>"
+RUN_ID="$(printf '%s' "$RUN_OUT" \
+  | sed -n 's/.*Queued a run with ID: \([a-z0-9-]\+\).*/\1/p' \
+  | tail -n1)"
 
-# Fallback: parse the “Queued a run with ID: …” line
+# Fallback: ask ACR for the most recent run for this task in the last few minutes
 if [[ -z "$RUN_ID" ]]; then
-  RUN_ID="$(printf '%s' "$RUN_OUT" \
-    | sed -n 's/.*Queued a run with ID: \([a-z0-9-]\+\).*/\1/p' \
-    | tail -n1)"
-fi
-
-# Fallback #2: ask ACR for the most recent run for this task (last few minutes)
-if [[ -z "$RUN_ID" ]]; then
-  RUN_ID="$(az acr task list-runs -r "$ACR_NAME" --top 5 --orderby time_desc \
-    -o tsv --query "[?task.name=='$ACR_TASK_NAME'] | [0].runId" 2>/dev/null || true)"
+  RUN_ID="$(az acr task list-runs -r "$ACR_NAME" --top 10 --orderby time_desc \
+    --query "[?task.name=='$ACR_TASK_NAME'] | [0].runId" -o tsv 2>/dev/null || true)"
 fi
 
 if [[ -z "$RUN_ID" ]]; then
@@ -66,7 +61,6 @@ fi
 
 echo "Queued ACR task run: $RUN_ID"
 echo "##teamcity[setParameter name='env.ACR_RUN_ID' value='${RUN_ID}']"
-
 
 # ---- Poll until completion (with timeout) ----
 status=""
