@@ -16,6 +16,9 @@ ACR_LOGIN_SERVER="${ACR_LOGIN_SERVER:-${ACR_NAME}.azurecr.io}"
 POLL_SLEEP="${POLL_SLEEP:-5}"
 MAX_WAIT_SECS="${MAX_WAIT_SECS:-1200}"
 RUN_ID=""
+ALIAS_TAG1="${ALIAS_TAG1:-}"   # e.g., "latest" or "standard"
+ALIAS_TAG2="${ALIAS_TAG2:-}"   # e.g., "dotnet8-node22"
+
 
 # ---- Azure login ----
 az login --service-principal -u "$AZ_CLIENT_ID" -p "$AZ_CLIENT_SECRET" --tenant "$AZ_TENANT_ID" >/dev/null
@@ -123,7 +126,7 @@ fi
 # ---- Resolve built image digest (if succeeded) ----
 DIGEST=""
 if [[ "$status" == "Succeeded" ]]; then
-  # up to 6 attempts over ~18s to ride out ACR metadata propagation
+  # retry a few times in case ACR metadata lags after push
   for i in {1..6}; do
     DIGEST="$(az acr manifest show-metadata -r "$ACR_NAME" \
       -n "${IMAGE_REPOSITORY}:${IMAGE_TAG}" \
@@ -140,9 +143,16 @@ if [[ "$status" == "Succeeded" ]]; then
   fi
 fi
 
-
 # ---- Write manifest.json (if we have digest or runtime) ----
-if [[ -n "${DIGEST}${RUNTIME_JSON}" ]]; then
+if [[ -n "${DIGEST}${RUNTIME_JSON}" || =n "$DIGEST" ]]; then
+  ALIASES_JSON="[]"
+  if [[ -n "$ALIAS_TAG1" || -n "$ALIAS_TAG2" ]]; then
+    tmp=()
+    [[ -n "$ALIAS_TAG1" ]] && tmp+=("\"$ALIAS_TAG1\"")
+    [[ -n "$ALIAS_TAG2" ]] && tmp+=("\"$ALIAS_TAG2\"")
+    ALIASES_JSON="[$(IFS=,; echo "${tmp[*]}")]"
+  fi
+
   cat > manifest.json <<EOF
 {
   "image": "${ACR_LOGIN_SERVER}/${IMAGE_REPOSITORY}:${IMAGE_TAG}",
@@ -151,6 +161,7 @@ if [[ -n "${DIGEST}${RUNTIME_JSON}" ]]; then
   "loginServer": "${ACR_LOGIN_SERVER}",
   "runId": "${RUN_ID}",
   "digest": "${DIGEST}",
+  "aliases": ${ALIASES_JSON},
   "runtime": ${RUNTIME_JSON:-null}
 }
 EOF
