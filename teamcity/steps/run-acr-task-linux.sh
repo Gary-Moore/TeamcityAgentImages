@@ -19,7 +19,6 @@ RUN_ID=""
 ALIAS_TAG1="${ALIAS_TAG1:-}"   # e.g., "latest" or "standard"
 ALIAS_TAG2="${ALIAS_TAG2:-}"   # e.g., "dotnet8-node22"
 
-
 # ---- Azure login ----
 az login --service-principal -u "$AZ_CLIENT_ID" -p "$AZ_CLIENT_SECRET" --tenant "$AZ_TENANT_ID" >/dev/null
 az account set --subscription "$AZ_SUBSCRIPTION_ID"
@@ -38,30 +37,27 @@ echo "Running ACR Task '$ACR_TASK_NAME' on '$ACR_NAME' for tag '$IMAGE_TAG'..."
 
 START_ISO="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
-# Queue the task; do not rely on stdout text (it can be empty with --no-wait/--no-logs)
+# Queue the task; don't rely on stdout text
 if ! az acr task run -r "$ACR_NAME" -n "$ACR_TASK_NAME" \
      --set image_tag="$IMAGE_TAG" "$@" \
      --no-logs --no-wait --only-show-errors >/dev/null 2>&1; then
   echo "WARN: 'az acr task run' returned non-zero; attempting to discover a run anyway…"
 fi
 
-# Robust discovery of the new run:
-# Poll briefly for a fresh run whose createTime >= START_ISO and belongs to our task.
+# Discover the new run
 DISCOVERY_TIMEOUT_SECS="${DISCOVERY_TIMEOUT_SECS:-20}"
 DISCOVERY_INTERVAL_SECS="${DISCOVERY_INTERVAL_SECS:-1}"
 deadline=$(( $(date +%s) + DISCOVERY_TIMEOUT_SECS ))
 
 while [[ -z "$RUN_ID" && $(date +%s) -lt $deadline ]]; do
-  # Get the newest run for this task
   CANDIDATE_ID="$(az acr task list-runs -r "$ACR_NAME" -n "$ACR_TASK_NAME" --top 20 \
       --query "sort_by(@, &createTime)[-1].runId" -o tsv 2>/dev/null || true)"
 
   if [[ -n "$CANDIDATE_ID" ]]; then
     CANDIDATE_CREATED="$(az acr task show-run -r "$ACR_NAME" --run-id "$CANDIDATE_ID" \
         --query createTime -o tsv 2>/dev/null || echo "")"
-
     # ISO8601 UTC strings compare lexicographically
-    if [[ -n "$CANDIDATE_CREATED" && "$CANDIDATE_CREATED" > "$START_ISO" || "$CANDIDATE_CREATED" == "$START_ISO" ]]; then
+    if [[ -n "$CANDIDATE_CREATED" && ( "$CANDIDATE_CREATED" > "$START_ISO" || "$CANDIDATE_CREATED" == "$START_ISO" ) ]]; then
       RUN_ID="$CANDIDATE_ID"
       break
     fi
@@ -99,12 +95,21 @@ while :; do
 done
 echo "Run $RUN_ID finished with status: $status"
 
-# ---- Fetch logs (always) ----
-LOG_TXT="$(az acr task logs -r "$ACR_NAME" --run-id "$RUN_ID" 2>/dev/null || true)"
-printf '%s\n' "$LOG_TXT" > "acr-task-${RUN_ID}.log"
-echo "##teamcity[publishArtifacts 'acr-task-${RUN_ID}.log']" || true
+# Decide FINAL exit code *once* (prevents best-effort steps from flipping outcome)
+FINAL_EXIT=0
+if [[ "$status" != "Succeeded" ]]; then
+  FINAL_EXIT=1
+fi
 
-# ---- Extract runtime JSON ----
+# From here, don't fail on best-effort work
+set +e
+
+# ---- Fetch logs (always, best-effort) ----
+LOG_TXT="$(az acr task logs -r "$ACR_NAME" --run-id "$RUN_ID" 2>/dev/null)"
+printf '%s\n' "$LOG_TXT" > "acr-task-${RUN_ID}.log"
+echo "##teamcity[publishArtifacts 'acr-task-${RUN_ID}.log']"
+
+# ---- Extract runtime JSON (best-effort) ----
 BLOCK_JSON="$(printf '%s\n' "$LOG_TXT" | sed -n '/PDS_RUNTIME_JSON_START/,/PDS_RUNTIME_JSON_END/p' | sed '1d;$d')"
 if [[ -z "$BLOCK_JSON" ]]; then
   SINGLE_JSON="$(printf '%s\n' "$LOG_TXT" | sed -n 's/.*PDS_RUNTIME_JSON:[[:space:]]*//p' | sed -n '1p')"
@@ -114,37 +119,35 @@ fi
 RUNTIME_JSON="${BLOCK_JSON:-$SINGLE_JSON}"
 if [[ -n "$RUNTIME_JSON" ]]; then
   if command -v jq >/dev/null 2>&1; then
-    printf '%s\n' "$RUNTIME_JSON" | jq -c . > pds-runtime.json
+    printf '%s\n' "$RUNTIME_JSON" | jq -c . > pds-runtime.json 2>/dev/null
   else
     printf '%s\n' "$RUNTIME_JSON" > pds-runtime.json
   fi
   echo "Wrote pds-runtime.json"
 else
-  echo "No runtime JSON found in logs (expected if build failed before smoke)."
+  echo "No runtime JSON found in logs (non-fatal)."
 fi
 
-# ---- Resolve built image digest (if succeeded) ----
+# ---- Resolve built image digest (best-effort, with retries) ----
 DIGEST=""
 if [[ "$status" == "Succeeded" ]]; then
-  # retry a few times in case ACR metadata lags after push
   for i in {1..6}; do
     DIGEST="$(az acr manifest show-metadata -r "$ACR_NAME" \
       -n "${IMAGE_REPOSITORY}:${IMAGE_TAG}" \
-      --query digest -o tsv 2>/dev/null || true)"
+      --query digest -o tsv 2>/dev/null)"
     [[ -n "$DIGEST" ]] && break
     sleep 3
   done
-
   if [[ -n "$DIGEST" ]]; then
     echo "Resolved digest for ${IMAGE_REPOSITORY}:${IMAGE_TAG} -> ${DIGEST}"
     echo "##teamcity[setParameter name='env.IMAGE_DIGEST' value='${DIGEST}']"
   else
-    echo "WARNING: Could not resolve digest for ${IMAGE_REPOSITORY}:${IMAGE_TAG}"
+    echo "WARNING: Could not resolve digest for ${IMAGE_REPOSITORY}:${IMAGE_TAG} (non-fatal)"
   fi
 fi
 
-# ---- Write manifest.json (if we have digest or runtime) ----
-if [[ -n "${DIGEST}${RUNTIME_JSON}" || =n "$DIGEST" ]]; then
+# ---- Write manifest.json (if we have digest and/or runtime) ----
+if [[ -n "${DIGEST}${RUNTIME_JSON}" ]]; then
   ALIASES_JSON="[]"
   if [[ -n "$ALIAS_TAG1" || -n "$ALIAS_TAG2" ]]; then
     tmp=()
@@ -166,13 +169,13 @@ if [[ -n "${DIGEST}${RUNTIME_JSON}" || =n "$DIGEST" ]]; then
 }
 EOF
   echo "Wrote manifest.json"
-  echo "##teamcity[publishArtifacts 'manifest.json']" || true
+  echo "##teamcity[publishArtifacts 'manifest.json']"
 fi
 
-# ---- Exit with the run’s outcome ----
-if [[ "$status" != "Succeeded" ]]; then
-  echo "ACR task run failed; see acr-task-${RUN_ID}.log"
-  exit 1
+# ---- Final outcome ----
+if [[ $FINAL_EXIT -ne 0 ]]; then
+  echo "ACR task run ended with status '$status' — marking build failed."
+else
+  echo "ACR task run succeeded — marking build successful."
 fi
-
-echo "Done. Artifacts: manifest.json (if present), pds-runtime.json (if present), acr-task-${RUN_ID}.log"
+exit $FINAL_EXIT
